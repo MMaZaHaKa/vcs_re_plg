@@ -491,7 +491,7 @@ inline bool BTN(int c) { return (GetAsyncKeyState(c) & 0x8000); }
 #define PSP_BASE 0x08804000 // starts from
 uintptr_t PPSSPP_BASE = 0; // pointer to 1st byte elf
 #define PSPPOINTER(p)  ( (p) ? ((((uintptr_t)p) - PSP_BASE) + PPSSPP_BASE) : null ) // pPSP(ida) -> pPSP(win) (null saving)
-#define PSPTRANSLATE(p) ( (p) ? ((((uintptr_t)p) /*- PSP_BASE*/) - PPSSPP_BASE) : null ) // pPSP(win) -> pPSP(ida) (null saving)
+#define PSPTRANSLATE(p) ( (p) ? ((((uintptr_t)p) - PPSSPP_BASE) + PSP_BASE) : null ) // pPSP(win) -> pPSP(ida) (null saving)
 #define IDATRANSLATE(p) ((((uintptr_t)p) - PSP_BASE) + PPSSPP_BASE) /*PSPPOINTER(p)*/ // null non save
 
 //template<typename T> T inline EMUPOINTER(void* p) { return (T)(p ? PSPPOINTER(p) : null); } // need?
@@ -541,6 +541,11 @@ struct CPad
 	char KeyBoardCheatString[12];
 	char field_B1[31];
 	float field_D0;
+};
+struct CVector2D
+{
+	float x;
+	float y;
 };
 struct CVuVector
 {
@@ -793,30 +798,51 @@ union uRslObjects
 	RpClump* m_rpClump;
 	RpAtomic* m_rpAtomic;
 };
+/* 478 */
 struct CEntity
 {
 	CPlaceable CPlaceable;
-	char CE_flags_A;
-	char CE_flags_B;
-	char CE_flags_C;
-	char CE_flags_D;
-	char _CE_flags_E;
-	char CE_flags_F;
-	char CE_flags_G;
-	char CE_flags_H;
-	char CE_flags_I;
-	char CE_flags_J;
-	char CE_flags_K;
-	char CE_flags_L;
+	void* m_pFirstReference;
+	union
+	{
+		struct {
+			// 0x48
+			uint16_t m_bDummyHasRwMatrix : 1; // dummy psp ps2
+			uint16_t m_type : 3; // eEntityType
+			uint16_t m_status : 5; // eEntityStatus
+
+			// 0x49
+			//uint16_t m_status : 1 <--- last bit m_status from 0x48
+			uint16_t bUsesCollision : 1;      // does entity use collision
+			uint16_t bCollisionProcessed : 1; // has object been processed by a ProcessEntityCollision function
+			uint16_t bIsStatic : 1;           // is entity static
+			uint16_t bHasContacted : 1;       // has entity processed some contact forces
+			uint16_t bPedPhysics : 1;
+			uint16_t bIsStuck : 1;          // is entity stuck
+			uint16_t bIsInSafePosition : 1; // is entity in a collision free safe position
+		};
+		struct {
+			uint8_t CE_flags_A;
+			uint8_t CE_flags_B;
+		};
+	};
+	uint8_t CE_flags_C;
+	uint8_t CE_flags_D;
+	uint8_t _CE_flags_E;
+	uint8_t CE_flags_F;
+	uint8_t CE_flags_G;
+	uint8_t CE_flags_H;
 	//RpAtomic* m_rwObject;
-	uRslObjects m_urwObject;
+	uRslObjects m_urwObject; // 4b
 	__int16 m_scanCode;
 	__int16 m_modelIndex;
 	__int16 m_modelIndex2;
-	char flags_field_5A;
-	char m_lastWepDam;
+	int8_t m_level : 3;
+	int8_t m_area : 5;
+	char m_nLastWeaponToDamage;
 	void* vftable;
 };
+static_assert(sizeof(CEntity) == 0x60, "sizeof(CEntity)");
 
 /* 486 */
 struct CPlayerInfo
@@ -1088,6 +1114,129 @@ struct tCombatMove
 	char field_3F;
 };
 
+//#pragma pack(push, 1)
+class CCombatMoveData_A_A
+{
+public:
+	uint8_t field_0[0x18]; // min field p2-p1, or min 0x8 unk_973DD44. 0x18 точно, мб меньше
+};
+
+class CCombatMoveData_A
+{
+public:
+	CCombatMoveData_A_A** field_0; // 4 ptr to pointers (16b) [p1,p2,p3,p4]
+	int32_t m_nCount; // 4
+};
+
+class CCombatMove
+{
+public:
+	uint8_t field_0[16];
+	CVuVector vec_field_10;
+	void* ptr_field_20; // reloc todo
+	void* ptr_field_24; // reloc todo
+	int16_t m_nDelta;
+	int8_t m_nFlags;
+	int8_t field_2B;
+	int8_t flags_field_2C;
+	uint8_t field_2D[6];
+	char m_name[11];
+	uint8_t field_3E;
+	uint8_t field_3F;
+};
+static_assert(sizeof(CCombatMove) == 0x40 - (4 * 2) + (sizeof(void*) * 2), "sizeof(CCombatMove) == 0x40");
+
+class CCombatMoveData
+{
+public:
+	CCombatMove* m_aMoves;
+	int32_t m_nMoveCount; // 104 // 0x68
+};
+
+class CCombatMoveData_B_A
+{
+public:
+	uint8_t field_0[32]; // 32 =  0x6A0 / 0x35
+};
+
+class CCombatMoveData_B
+{
+public:
+	CCombatMoveData_B_A* field_0;
+	int32_t m_nCount; // 53 // 0x35
+};
+
+class CCombatMoves
+{
+public:
+	CCombatMoveData_A m_DataA;   // 0x04
+	CCombatMoveData m_MovesData; // 0x68
+	CCombatMoveData_B m_DataB;   // 0x35
+	CEntity* m_pEntity;
+	int8_t field_1C;
+	int8_t field_1D;
+	uint8_t field_1E[8];
+	int8_t field_26; // sub_881EE20 combat
+	uint8_t field_27[0xD1]; // 4 ptr, todo probably pad or smaller size (pChunk-pS+funOff)
+};
+static_assert(sizeof(CCombatMoves) == 0xF8 - (4 * 4) + (sizeof(void*) * 4), "sizeof(CCombatMoves) == 0xF8"); // can be smaller, todo find CCombatMoves max offset
+
+
+class CCombatStat_A
+{
+public:
+	float field_0[2];
+	uint8_t field_8[8];
+};
+static_assert(sizeof(CCombatStat_A) == 0x10, "sizeof(CCombatStat_A) == 0x10");
+
+class CCombatStat_B_A // recheck, guessed by unk_973E36C size 4 to adhesiveLimitTable, probably int32
+{
+public:
+	uint8_t field_8[4];
+};
+static_assert(sizeof(CCombatStat_B_A) == 0x4, "sizeof(CCombatStat_B_A) == 0x4");
+
+class CCombatStat_B
+{
+public:
+	int32_t field_0; // unk mem trash, probably runtime pointer
+	CCombatStat_B_A* m_pData; // guessed ptr to block 4b, or pInt32
+};
+static_assert(sizeof(CCombatStat_B) == 0x8 - (4) + (sizeof(void*)), "sizeof(CCombatStat_B) == 0x8");
+
+class CCombatStat
+{
+public:
+	int32_t m_ePedStat; // NUM_PEDSTATS = 42
+	int8_t field_4;
+	uint8_t m_nCount_A;
+	uint8_t field_6[2]; // pad?
+	CCombatStat_A* m_aArr_A;
+	CCombatStat_B* m_aArr_B;
+	uint8_t m_nCount_B;
+	uint8_t field_11[3]; // pad?
+	int32_t field_14;
+	int32_t field_18;
+	int32_t field_1C;
+	int32_t field_20;
+	int32_t field_24;
+	int32_t field_28;
+
+
+};
+static_assert(sizeof(CCombatStat) == 0x2C - (4 * 2) + (sizeof(void*) * 2), "sizeof(CCombatStat) == 0x2C");
+
+class CCombatStats
+{
+public:
+	CCombatStat* m_aStats;
+	int16_t m_nNumStats; // 3
+	uint8_t field_6[2]; // pad
+};
+static_assert(sizeof(CCombatStats) == 0x8 - (4) + (sizeof(void*)), "sizeof(CCombatStats) == 0x8");
+//#pragma pack(pop)
+
 
 //=================================================================================================== POOLS
 #define CPools_ms_pPtrNodePool ((CPool*)PSPPOINTER(*(uintptr_t**)IDATRANSLATE(0x08BADEF0))) // 12
@@ -1122,6 +1271,13 @@ inline bool CPools_GetSlotIsFree(CPool* p, int32_t i) { return !!(((uint8_t*)PSP
 #define CPad_Pads ((CPad*)IDATRANSLATE(0x08BDE610))
 #define FrontEndMenuManager ((uint8_t*)IDATRANSLATE(0x08BC9100))
 #define FrontEndMenuManagerSettings ((uint8_t*)PSPPOINTER(*(uintptr_t**)IDATRANSLATE(0x08BB3454)))
+#define TheRadar ((uint8_t*)PSPPOINTER(*(uintptr_t**)IDATRANSLATE(0x08BB343C)))
+#define TheHud ((uint8_t*)PSPPOINTER(*(uintptr_t**)IDATRANSLATE(0x08BB3438)))
+#define gpThePaths ((uint8_t*)PSPPOINTER(*(uintptr_t**)IDATRANSLATE(0x08BADB40)))
+#define CustomSoundTrack ((uint8_t*)PSPPOINTER(*(uintptr_t**)IDATRANSLATE(0x08BB3468)))
+#define fontdef ((uint8_t*)PSPPOINTER(*(uintptr_t**)IDATRANSLATE(0x08BB2510)))
+#define gpFightMoves ((uint8_t*)PSPPOINTER(*(uintptr_t**)IDATRANSLATE(0x08BAA5B0)))
+#define gpFightStats ((uint8_t*)PSPPOINTER(*(uintptr_t**)IDATRANSLATE(0x08BAB230)))
 
 // MP
 #define cAdhoc_mspInst ((uint8_t*)PSPPOINTER(*(uintptr_t**)IDATRANSLATE(0x08BB344C)))
@@ -1133,14 +1289,37 @@ inline bool CPools_GetSlotIsFree(CPool* p, int32_t i) { return !!(((uint8_t*)PSP
 #define CModelInfo_ms_modelInfoPtrs ((CBaseModelInfo**)IDATRANSLATE(*(uintptr_t**)IDATRANSLATE(0x08BB1D78)))
 #define CModelInfo_msNumModelInfos (*(uint32_t*)IDATRANSLATE(0x08BB3B48)) // ITS NUM, NOT POINTER!!!!
 inline CBaseModelInfo* GetModelInfo(int index) { return EMUPOINTER<CBaseModelInfo*>(CModelInfo_ms_modelInfoPtrs[index]); }
-int GetEntityType(CEntity* pEntity) { int m_type = ((pEntity->_CE_flags_E >> 1) & 0x07); return m_type; }
-void SetEntityType(CEntity* pEntity, int type) { pEntity->_CE_flags_E &= ~(0x07 << 1); pEntity->_CE_flags_E |= (type & 0x07) << 1; }
-int GetEntityStatus(CEntity* pEntity) { int m_status = ((pEntity->_CE_flags_E >> 4) & 0x0F) | ((pEntity->CE_flags_F & 0x01) << 4); return m_status; }
-void SetEntityStatus(CEntity* pEntity, int st)
-{
-	pEntity->_CE_flags_E &= ~(0x0F << 4); pEntity->_CE_flags_E |= (st & 0x0F) << 4; pEntity->CE_flags_F &= ~0x01; pEntity->CE_flags_F |= (st >> 4) & 0x01;
+//int GetEntityType(CEntity* pEntity) { int m_type = ((pEntity->_CE_flags_E >> 1) & 0x07); return m_type; }
+//void SetEntityType(CEntity* pEntity, int type) { pEntity->_CE_flags_E &= ~(0x07 << 1); pEntity->_CE_flags_E |= (type & 0x07) << 1; }
+//int GetEntityStatus(CEntity* pEntity) { int m_status = ((pEntity->_CE_flags_E >> 4) & 0x0F) | ((pEntity->CE_flags_F & 0x01) << 4); return m_status; }
+//void SetEntityStatus(CEntity* pEntity, int st)
+//{
+//	pEntity->_CE_flags_E &= ~(0x0F << 4); pEntity->_CE_flags_E |= (st & 0x0F) << 4; pEntity->CE_flags_F &= ~0x01; pEntity->CE_flags_F |= (st >> 4) & 0x01;
+//}
+int GetEntityType(CEntity* pEntity) { return pEntity->m_type; }
+void SetEntityType(CEntity* pEntity, int type) { pEntity->m_type = type; }
+int GetEntityStatus(CEntity* pEntity) { return pEntity->m_status; }
+void SetEntityStatus(CEntity* pEntity, int st) { pEntity->m_status = st; }
+const char* GetEntityStatusStr(CEntity* pEntity) {
+	static const char* status[] = {
+	"STATUS_PLAYER",
+	"STATUS_PLAYER_PLAYBACKFROMBUFFER",
+	"STATUS_SIMPLE",
+	"STATUS_PHYSICS",
+	"STATUS_ABANDONED",
+	"STATUS_WRECKED",
+	"STATUS_TRAIN_MOVING",
+	"STATUS_TRAIN_NOT_MOVING",
+	"STATUS_FERRY_MOVING",
+	"STATUS_FERRY_NOT_MOVING",
+	"STATUS_HELI",
+	"STATUS_PLANE",
+	"STATUS_PLAYER_REMOTE",
+	"STATUS_PLAYER_DISABLED",
+	"STATUS_GHOST",
+	};
+	return status[GetEntityStatus(pEntity)];
 }
-
 void TeleportEntity(CEntity* pE, CVuVector pos, bool updrw = true)
 {
 	//if (pE) { pE->CPlaceable.m_pMat.pos.x = pos.x; pE->CPlaceable.m_pMat.pos.y = pos.y; pE->CPlaceable.m_pMat.pos.z = pos.z; }
@@ -2976,7 +3155,7 @@ void UpdMP()
 		return;
 	}
 
-	if (BTN('G'))
+	if (BTN('H'))
 	{
 		printf("cAdhoc_mspInst: PC:0x%p PSP:0x%p\n", cAdhoc_mspInst, *(uintptr_t**)IDATRANSLATE(0x08BB344C));
 		printf("cLobby_mspInst: PC:0x%p PSP:0x%p\n", cLobby_mspInst, *(uintptr_t**)IDATRANSLATE(0x08BB3458));
@@ -3354,7 +3533,7 @@ void UpdTest1()
 	//	for (int32_t i = CPools_ms_pPedPool->m_nSize - 1; i >= 0; i--)
 	//	{
 	//		if (CPools_GetSlotIsFree(CPools_ms_pPedPool, i)) { continue; }
-	//		CPed* p = (CPed*)CPools_GetSlot(CPools_ms_pPedPool, i, 3360);
+	//		CPed* p = (CPed*)CPools_GetSlot(CPools_ms_pPedPool, i, 3344);
 	//		if (p) {
 	//			int32_t mindex = p->CPhysical.CEntity.m_modelIndex;
 	//			CBaseModelInfo* mi = GetModelInfo(mindex);
@@ -3443,8 +3622,27 @@ void LogH()
 		printf("%f %f %f\n", e->CPlaceable.m_pMat.pos.x, e->CPlaceable.m_pMat.pos.y, e->CPlaceable.m_pMat.pos.z);
 }
 
+//#define LOG_MENU_
+//#define LOG_MENU2_
 void LogMenu()
 {
+	system("cls");
+
+	struct tList {
+		uint8_t* pStart;
+		uint8_t* pEnd;
+		uint8_t* pCap;
+	};
+	static_assert(sizeof(tList) == 4*3, "sizeof(tList)");
+
+	auto DumpErrors = [&]() {
+		uint32_t* pArr = EMUPOINTER<uint32_t*>(0x08B8A830);
+		for (int32_t i = 0; i < 9; i++) {
+			printf("\"%s\"\n", EMUPOINTER<char*>(pArr[i]));
+		}
+	};
+	//DumpErrors();
+
 	auto cMenuItemVT = [&](uint32_t vt) {
 		switch (vt)
 		{
@@ -3477,11 +3675,12 @@ void LogMenu()
 		return "UNKNOWN";
 	};
 
-	auto Log_cMenuItem = [&](uint8_t* pPspThis) {
+	auto Log_cMenuItem = [&](uint8_t* pPspThis, int32_t mode) {
 		if (!pPspThis)
 			return;
 		uint8_t* pThis = EMUPOINTER<uint8_t*>(pPspThis);
-		//printf("    pPspThis 0x%p\n", pPspThis);
+		uint32_t& vt = *OFFSET(pThis, 0x24, uint32_t*);
+		printf("    cMenuItem pPspThis 0x%p type %s\n", pPspThis, cMenuItemVT(vt)); //------------------------------------------
 
 		uint8_t* pStrStart = EMUPOINTER<uint8_t*>(*OFFSET(pThis, 0, uint8_t**)); // ptr to 1st list field (ptr to start)
 		uint32_t& startX = *OFFSET(pThis, 0xC, uint32_t*);
@@ -3490,39 +3689,132 @@ void LogMenu()
 		uint32_t& sizeY = *OFFSET(pThis, 0x18, uint32_t*);
 		float& f_field_1C = *OFFSET(pThis, 0x1C, float*);
 		bool& bShouldRender = *OFFSET(pThis, 0x20, bool*);
-		uint32_t& vt = *OFFSET(pThis, 0x24, uint32_t*);
+		tList* m_aTriggerActions = OFFSET(pThis, 0x64, tList*); // массив векторов указателей
+		uint8_t nItemSize = 4; // void*
 
 		//startX = rand() % 500;
 		//startY = rand() % 500;
 		//bShouldRender = rand() % 2;
+		static int32_t nCnt = 0;
+		//if (nCnt++ == 1 || nCnt == 3) {
+		//	bShouldRender = false;
+		//	printf("    gfhfgghfh type %s\n", cMenuItemVT(vt));
+		//}
 
+		if (vt == 0x08BA5FA8 && *OFFSET(pThis, 0xC4, uint8_t*) > 1) // cMenuItemMultiState
+		{
+			uint8_t& nCount = *OFFSET(pThis, 0xC4, uint8_t*);
+			uint8_t* pStart = EMUPOINTER<uint8_t*>(*OFFSET(pThis, 0xB8, uint8_t**));
+			uint8_t* pEnd = EMUPOINTER<uint8_t*>(*OFFSET(pThis, 0xB8 + 4, uint8_t**));
+			uint8_t nCountE = (pEnd - pStart) / 12;
+
+			//printf("cMenuItemMultiState count %d\n", nCount);
+			//printf("ps 0x%p  pe 0x%p\n", pStart, pEnd);
+
+			uint8_t* pNode = pStart;
+			for (int32_t i = 0; i < nCount; i++) { // vecs
+				uint8_t* pStrStart = EMUPOINTER<uint8_t*>(*OFFSET(pNode, 0x0, uint8_t**));
+				//printf("   str %s\n", pStrStart);
+				pNode += 12;
+			}
+		}
+		else if (vt == 0x08BA61D8) // cMenuItemSlider
+		{
+			float& f = *OFFSET(pThis, 0xB8, float*);
+			int32_t& bc = *OFFSET(pThis, 0xBC, int32_t*);
+			int32_t& c0 = *OFFSET(pThis, 0xC0, int32_t*);
+			int8_t& c4 = *OFFSET(pThis, 0xC4, int8_t*);
+			//printf("%f %d %d %d\n", f, bc, c0, c4);
+			//f = 0.2f;
+			//bc = c0 = 128;
+			//c0 = 5;
+		}
+
+		if (mode == 2) { // navs buttons
+			if (vt == 0x08BA5FA8) // multistate
+			{
+				int32_t& m_nHorizontal = *OFFSET(pThis, 0x58, int32_t*);
+				printf("%d %d  H %d\n", startX, startY, m_nHorizontal);
+				m_nHorizontal = 4; // 0def 1left 2centre 4right
+				//int d = 20;
+				//startX = 480-d;
+				//startY = 272-d;
+				//bShouldRender = false;
+			}
+		}
+
+		tList* pTNode = m_aTriggerActions;
+		for (int i = 0; i < 7; i++) { // массив
+			uint8_t* pStart = EMUPOINTER<uint8_t*>(pTNode->pStart);
+			uint8_t* pEnd = EMUPOINTER<uint8_t*>(pTNode->pEnd);
+#ifdef LOG_MENU2_
+			printf("    0x%p\n", pTNode->pStart);
+#endif
+
+			int l = (pEnd - pStart) / nItemSize;
+			for (int j = 0; j < l; j++) {
+				uint8_t* pEl = *(uint8_t**)(pStart + (nItemSize * j));
+				uint8_t* pBind = EMUPOINTER<uint8_t*>(pEl);
+				uint8_t* pStrStart = EMUPOINTER<uint8_t*>(*OFFSET(pBind, 0x4, uint8_t**)); // ptr to 1st list field (ptr to start)
+				uint8_t* pStrStart2 = EMUPOINTER<uint8_t*>(*OFFSET(pBind, 0x10, uint8_t**));
+#ifdef LOG_MENU2_
+				printf("  pStrStart %s\n", pStrStart);
+				printf("  pStrStart2 %s\n", pStrStart2);
+				printf("    el 0x%p\n", pEl);
+#endif
+
+			}
+
+
+
+			++pTNode;
+		}
+
+#ifdef LOG_MENU_
 		printf("    NAME %s\n", pStrStart);
 		printf("    vt %s\n", cMenuItemVT(vt));
+		printf("\n");
+#endif
 	};
 
-	auto Log_cMenuItems = [&](uint8_t* pPspThis){
+	auto Log_cMenuItems = [&](uint8_t* pPspThis, int32_t mode){
 		if (!pPspThis)
 			return;
 		uint8_t* pThis = EMUPOINTER<uint8_t*>(pPspThis);
-		//printf("pPspThis 0x%p\n", pPspThis);
+		//printf("cMenuItems pPspThis 0x%p\n", pPspThis);
 
 		uint8_t* pStrStart = EMUPOINTER<uint8_t*>(*OFFSET(pThis, 0, uint8_t**)); // ptr to 1st list field (ptr to start)
 		uint8_t* pStrStart2 = EMUPOINTER<uint8_t*>(*OFFSET(pThis, 0x18, uint8_t**));
 		uint8_t* m_vecItems_Start = EMUPOINTER<uint8_t*>(*OFFSET(pThis, 0x24, uint8_t**)); // ptr to 1st list field
 		uint8_t* m_vecItems_End = EMUPOINTER<uint8_t*>(*OFFSET(pThis, 0x28, uint8_t**)); // ptr to 2st list field
+		uint32_t& field_30 = *OFFSET(pThis, 0x30, uint32_t*);
 		uint8_t nItemSize = 4; // void*
 
 		//pStrStart[0] = '_';
 		//pStrStart2[0] = '_';
+#ifdef LOG_MENU_
 		printf("  NAME %s\n", pStrStart);
 		printf("  NAME2 %s\n", pStrStart2);
 		printf("  m_vecItems Size %d\n", (m_vecItems_End - m_vecItems_Start) / nItemSize);
+#endif
 
 		uint8_t* node = m_vecItems_Start;
+		uint32_t i = 0;
 		while (node != m_vecItems_End)
 		{
 			uint8_t* pItem = (uint8_t*)*(uint32_t*)node;
-			Log_cMenuItem(pItem);
+#ifdef LOG_MENU_
+			printf("  [%d] 0x%p %d  (0x%p)\n", i++, pItem, field_30 == (uint32_t)pItem, field_30);
+#endif
+			//field_30 = 0;
+			node += nItemSize;
+		}
+
+		node = m_vecItems_Start;
+		while (node != m_vecItems_End)
+		{
+			uint8_t* pItem = (uint8_t*)*(uint32_t*)node;
+			Log_cMenuItem(pItem, mode);
 			node += nItemSize;
 		}
 	};
@@ -3534,14 +3826,14 @@ void LogMenu()
 	uint8_t* m_vecMenuNavigationHints_EndPSP = EMUPOINTER<uint8_t*>(*OFFSET(FrontEndMenuManager, 20, uint8_t**));
 	uint8_t nItemSize = 4; // void*
 
-	Log_cMenuItems(pMasterPSP);
+	Log_cMenuItems(pMasterPSP, 0);
 	//printf("0x%p\n", pMasterPSP);
 
 	uint8_t* node = m_vecScreens_StartPSP;
 	while (node != m_vecScreens_EndPSP)
 	{
 		uint8_t* pItem = (uint8_t*)*(uint32_t*)node;
-		Log_cMenuItems(pItem);
+		Log_cMenuItems(pItem, 1);
 		node += nItemSize;
 	}
 
@@ -3549,24 +3841,643 @@ void LogMenu()
 	while (node != m_vecMenuNavigationHints_EndPSP)
 	{
 		uint8_t* pItem = (uint8_t*)*(uint32_t*)node;
-		Log_cMenuItems(pItem);
+		Log_cMenuItems(pItem, 2);
 		node += nItemSize;
 	}
 }
 
+#define LOG_(a)
+void DumpFonts(const char* filename) {
+	std::ofstream out(filename);
+	if (!out.is_open()) {
+		printf("Не удалось открыть файл для записи\n");
+		return;
+	}
+
+	uint8_t** tFontDefData = (uint8_t**)fontdef;
+	for (int32_t i = 0; i < 3; i++) {
+		uint8_t* tFontDef = EMUPOINTER<uint8_t*>(tFontDefData[i]);
+		if (!tFontDef) continue;
+
+		// ---- Дамп полей cFontSystem ----
+		out << "font\n";
+		LOG_(out << "# FontSystem[" << i << "] m_nCharCount\n";)
+		out << *(uint16_t*)(tFontDef + 0x00) << "\n";
+
+		LOG_(out << "# FontSystem[" << i << "] m_nExtendedCharCount\n";)
+		out << *(uint16_t*)(tFontDef + 0x02) << "\n";
+
+		LOG_(out << "# FontSystem[" << i << "] m_nMonospaceWidth\n";)
+		out << *(uint16_t*)(tFontDef + 0x04) << "\n";
+
+		LOG_(out << "# FontSystem[" << i << "] m_nFontHeightY\n";)
+		out << *(uint16_t*)(tFontDef + 0x06) << "\n";
+
+		//LOG_(out << "# FontSystem[" << i << "] m_pCharTable (address)\n";)
+		//out << *(uint32_t*)(tFontDef + 0x08) << "\n";  // указатель
+
+		//LOG_(out << "# FontSystem[" << i << "] m_pExtendedCharTable (address)\n";)
+		//out << *(uint32_t*)(tFontDef + 0x0C) << "\n";
+
+		LOG_(out << "# FontSystem[" << i << "] m_nFontStyle\n";)
+		out << (int)*(uint8_t*)(tFontDef + 0x10) << "\n";
+
+		LOG_(out << "# FontSystem[" << i << "] m_nTxdSlot\n";)
+		out << *(uint32_t*)(tFontDef + 0x14) << "\n";
+
+		LOG_(out << "# FontSystem[" << i << "] m_nTexWidth\n";)
+		out << *(uint16_t*)(tFontDef + 0x18) << "\n";
+
+		LOG_(out << "# FontSystem[" << i << "] m_nTexHeight\n";)
+		out << *(uint16_t*)(tFontDef + 0x1A) << "\n";
+
+		// m_CurrentColor (CRGBA) — 4 байта
+		LOG_(out << "# FontSystem[" << i << "] m_CurrentColor (RGBA)\n";)
+		uint32_t color = *(uint32_t*)(tFontDef + 0x1C);
+		out << "0x" << std::hex << color << std::dec << "\n";
+
+		LOG_(out << "# FontSystem[" << i << "] m_fScale\n";)
+		out << *(float*)(tFontDef + 0x20) << "\n";
+
+		LOG_(out << "# FontSystem[" << i << "] m_nPropMode\n";)
+		out << (int)*(uint8_t*)(tFontDef + 0x24) << "\n";
+
+		LOG_(out << "# FontSystem[" << i << "] m_nCentreMode\n";)
+		out << *(uint32_t*)(tFontDef + 0x28) << "\n";
+
+		// m_sTextureName (строка, максимум 15 байт)
+		LOG_(out << "# FontSystem[" << i << "] m_sTextureName\n";)
+		out << (char*)(tFontDef + 0x2C) << "\n";
+
+		LOG_(out << "# FontSystem[" << i << "] m_bOutlineOn\n";)
+		out << (int)*(uint8_t*)(tFontDef + 0x3B) << "\n";
+
+		LOG_(out << "# FontSystem[" << i << "] m_ColourBorder (RGBA)\n";)
+		uint32_t border = *(uint32_t*)(tFontDef + 0x3C);
+		out << "0x" << std::hex << border << std::dec << "\n";
+
+		LOG_(out << "# FontSystem[" << i << "] m_bBackgroundOn\n";)
+		out << (int)*(uint8_t*)(tFontDef + 0x40) << "\n";
+
+		LOG_(out << "# FontSystem[" << i << "] m_ColourBackground (RGBA)\n";)
+		uint32_t bg = *(uint32_t*)(tFontDef + 0x41); // смещение 0x41?
+		out << "0x" << std::hex << bg << std::dec << "\n";
+
+		LOG_(out << "# FontSystem[" << i << "] m_nNewLineAdd\n";)
+		out << *(uint32_t*)(tFontDef + 0x48) << "\n";
+		out << "end\n";
+
+		// ---- Дамп таблицы глифов (m_pCharTable) ----
+		uint8_t* charTable = EMUPOINTER<uint8_t*>(*(uint32_t*)(tFontDef + 0x08));
+		uint16_t charCount = *(uint16_t*)(tFontDef + 0x00); // m_nCharCount
+
+		out << "glyp\n";
+		if (charTable && charCount > 0)
+		{
+			for (uint16_t j = 0; j < charCount; ++j) {
+				uint8_t* glyph = charTable + j * 0x0E; // размер sGlyphInfo = 0x0E
+				LOG_(out << "# CharTable[" << j << "] m_nLeftOffset\n";)
+				out << *(int16_t*)(glyph + 0x00) << "\n";
+				LOG_(out << "# CharTable[" << j << "] m_nWidth\n";)
+				out << *(int16_t*)(glyph + 0x02) << "\n";
+				LOG_(out << "# CharTable[" << j << "] m_nRightOffset\n";)
+				out << *(int16_t*)(glyph + 0x04) << "\n";
+				LOG_(out << "# CharTable[" << j << "] m_nHeight\n";)
+				out << *(int16_t*)(glyph + 0x06) << "\n";
+				LOG_(out << "# CharTable[" << j << "] m_wchar\n";)
+				out << *(uint16_t*)(glyph + 0x08) << "\n";
+				LOG_(out << "# CharTable[" << j << "] m_nStartX\n";)
+				out << *(uint16_t*)(glyph + 0x0A) << "\n";
+				LOG_(out << "# CharTable[" << j << "] m_nStartY\n";)
+				out << *(uint16_t*)(glyph + 0x0C) << "\n";
+			}
+		}
+		out << "end\n";
+
+		// ---- Дамп расширенной таблицы глифов (m_pExtendedCharTable) ----
+		uint8_t* extTable = EMUPOINTER<uint8_t*>(*(uint32_t*)(tFontDef + 0x0C));
+		uint16_t extCount = *(uint16_t*)(tFontDef + 0x02); // m_nExtendedCharCount
+
+		out << "glext\n";
+		if (extTable && extCount > 0)
+		{
+			for (uint16_t j = 0; j < extCount; ++j) {
+				uint8_t* glyph = extTable + j * 0x0E;
+				LOG_(out << "# ExtendedCharTable[" << j << "] m_nLeftOffset\n";)
+				out << *(int16_t*)(glyph + 0x00) << "\n";
+				LOG_(out << "# ExtendedCharTable[" << j << "] m_nWidth\n";)
+				out << *(int16_t*)(glyph + 0x02) << "\n";
+				LOG_(out << "# ExtendedCharTable[" << j << "] m_nRightOffset\n";)
+				out << *(int16_t*)(glyph + 0x04) << "\n";
+				LOG_(out << "# ExtendedCharTable[" << j << "] m_nHeight\n";)
+				out << *(int16_t*)(glyph + 0x06) << "\n";
+				LOG_(out << "# ExtendedCharTable[" << j << "] m_wchar\n";)
+				out << *(uint16_t*)(glyph + 0x08) << "\n";
+				LOG_(out << "# ExtendedCharTable[" << j << "] m_nStartX\n";)
+				out << *(uint16_t*)(glyph + 0x0A) << "\n";
+				LOG_(out << "# ExtendedCharTable[" << j << "] m_nStartY\n";)
+				out << *(uint16_t*)(glyph + 0x0C) << "\n";
+			}
+		}
+		out << "end\n";
+	}
+
+	out.close();
+	printf("Дамп записан в %s\n", filename);
+}
+
+void LogFont()
+{
+	float& fracX = *EMUPOINTER<float*>(0x08BB1F20);
+	float& fracY = *EMUPOINTER<float*>(0x08BB1F24);
+	//fracX = fracY = 0.0f;
+
+	//DumpFonts("C:\\fontspsp.dat"); return;
+
+	struct sGlyphInfo
+	{
+		int16_t m_nLeftOffset;
+		int16_t m_nWidth;
+		int16_t m_nRightOffset;
+		int16_t m_nHeight;
+		int16_t m_wchar; // recheck
+		int16_t m_nU; // recheck
+		int16_t m_nV; // recheck
+	};
+	static_assert(sizeof(sGlyphInfo) == 0xE, "sizeof(sGlyphInfo) == 0xE");
+
+	uint8_t** tFontDefData = (uint8_t**)fontdef;
+	for (int32_t i = 0; i < 3; i++) {
+		uint8_t* tFontDef = EMUPOINTER<uint8_t*>(tFontDefData[i]);
+		uint16_t& numTab = *(uint16_t*)(tFontDef + 0x00);
+		uint8_t* m_pCharTable = EMUPOINTER<uint8_t*>(*OFFSET(tFontDef, 0x8, uint8_t**));
+		sGlyphInfo* pGlyph = (sGlyphInfo*)m_pCharTable;
+		for (int32_t j = 0; j < numTab; j++)
+		{
+			int dt = 1;
+
+			//pGlyph[j].m_nWidth--; // да уже
+			//pGlyph[j].m_nHeight--; // да тоньше
+			//pGlyph[j].m_nLeftOffset--; // визуально едет вправо
+			//pGlyph[j].m_nRightOffset--; // визуально едет влево
+			//pGlyph[j].m_nU--; // визуально едет вправо
+			//pGlyph[j].m_nV--; // визуально едет вниз
+
+			pGlyph[j].m_nLeftOffset++;
+			pGlyph[j].m_nRightOffset--;
+		}
+		continue;
+
+		//uint16_t& f0 = *(uint16_t*)(m_pCharTable + 0x00);
+		//uint16_t& f2 = *(uint16_t*)(m_pCharTable + 0x02);
+		//uint16_t& f4 = *(uint16_t*)(m_pCharTable + 0x04);
+		//uint16_t& f6 = *(uint16_t*)(m_pCharTable + 0x06);
+		//uint16_t& f8 = *(uint16_t*)(m_pCharTable + 0x08); // wchar
+		//uint16_t& fA = *(uint16_t*)(m_pCharTable + 0x0A);
+		//uint16_t& fC = *(uint16_t*)(m_pCharTable + 0x0C);
+
+		//int dt = 1;
+		////f2 += dt;
+		////f6 += dt;
+		////fA += dt;
+		////fC += dt;
+		////*(uint16_t*)tFontDef = 0;
+		//fA = fC = 0; // неа
+		//f0 = f4 = 0;
+		//f2 = f6 = 0;
+		//f8 = 0;
+		////memset(m_pCharTable, 0, 0xE**(uint16_t*)tFontDef);
+
+		////f0+=5; // m_nLeftOffset
+		////f2+=5; // m_nWidth
+		////f4+=5; // m_nRightOffset
+		////f6+=5; // m_nHeight
+		////f8+=5; // smth pad
+		////fA +=5; // 
+		////fC +=5; // 
+
+		////tFontDef[6] = rand() % 255;
+		////tFontDef[6] = 0;
+		////uint16_t& w = *(uint16_t*)(tFontDef + 0x18);
+		////uint16_t& h = *(uint16_t*)(tFontDef + 0x1A);
+		////w = rand() % 65200;
+		////h = rand() % 65200;
+		////printf("%s\n", (char*)tFontDef + 0x2C);
+	}
+}
+
+void LogCustomTracks()
+{
+	struct tList {
+		uint8_t* pStart;
+		uint8_t* pEnd;
+		uint8_t* pCap;
+	};
+	static_assert(sizeof(tList) == 4 * 3, "sizeof(tList)");
+
+	uint8_t* pThis = CustomSoundTrack;
+	uint8_t* vec2_field_18_Start = EMUPOINTER<uint8_t*>(*OFFSET(pThis, 0x18, uint8_t**)); // e8
+	uint8_t* vec2_field_18_End = EMUPOINTER<uint8_t*>(*OFFSET(pThis, 0x18+4, uint8_t**));
+	uint8_t* node = vec2_field_18_Start;
+	while (node != vec2_field_18_End)
+	{
+		//printf("###### %s\n", EMUPOINTER<char*>(*(int32_t*)(node + 4)));
+		printf("##\n");
+		node += 8;
+	}
+}
+
+void LogRadar()
+{
+	//uint8_t* gRadarTex = EMUPOINTER<uint8_t*>(0x08BD5AF0);
+	uint8_t* gRadarTex = EMUPOINTER<uint8_t*>(0x0989738C);
+	for (int32_t i = 0; i < 100; i++)
+	{
+		//printf("%d   0x%p\n", i, ((int32_t*)gRadarTex)[i]);
+	}
+
+	uint8_t* pThis = TheRadar;
+	CVuVector m_vec_field_1AD0 = *OFFSET(pThis, 0x1AD0, CVuVector*);
+	CVuVector m_vecPos_field_1AE0 = *OFFSET(pThis, 0x1AE0, CVuVector*);
+	CVuVector mypos = FindPlayerPed()->CPlaceable.m_pMat.pos;
+	//m_vec_field_1AD0.x = m_vec_field_1AD0.y = m_vec_field_1AD0.z = 0.0f;
+	printf("m_vec_field_1AD0: %f %f %f\n", m_vec_field_1AD0.x, m_vec_field_1AD0.y, m_vec_field_1AD0.z);
+	printf("m_vecPos_field_1AE0: %f %f %f\n", m_vecPos_field_1AE0.x, m_vecPos_field_1AE0.y, m_vecPos_field_1AE0.z);
+	printf("m_vec_field_1AD0: %f %f %f\n", mypos.x, mypos.y, mypos.z);
+}
+
+void LogMemoryTest()
+{
+	int _ = 16;
+	printf("\n");
+
+	for (int32_t i = 0; i < _; i++) {
+		uint32_t* pMem = EMUPOINTER<uint32_t*>(0x08BA1D80);
+		printf("car %d 0x%X\n", pMem[i], pMem[i]);
+	}
+	printf("\n");
+
+	for (int32_t i = 0; i < _; i++) {
+		uint32_t* pMem = EMUPOINTER<uint32_t*>(0x08BA1DBC);
+		printf("boat %d 0x%X\n", pMem[i], pMem[i]);
+	}
+	printf("\n");
+
+	for (int32_t i = 0; i < _; i++) {
+		uint32_t* pMem = EMUPOINTER<uint32_t*>(0x08BA1DE8);
+		printf("heli %d 0x%X\n", pMem[i], pMem[i]);
+	}
+	printf("\n");
+
+	for (int32_t i = 0; i < _; i++) {
+		uint32_t* pMem = EMUPOINTER<uint32_t*>(0x08BA1E04);
+		printf("ped %d 0x%X\n", pMem[i], pMem[i]);
+	}
+	printf("\n");
+}
+
+void LogPath()
+{
+	printf("path!!!\n");
+	struct t12 {
+		int a1[2]; // ptr
+		uint8_t a2[2]; // num
+		uint8_t a3[2]; // pad
+	};
+	static_assert(sizeof(t12) == 12, "s");
+	uint8_t* pThis = gpThePaths;
+	t12* p = (t12*)(pThis + 0x28);
+	//for (int32_t i = 0; i < 50*50; i++)
+	int max = 0;
+	for (int32_t i = 0; i < 500; i++)
+	{
+		//if (max < p[i].a2[0] || max < p[i].a2[1]) max = p[i].a2[0] > p[i].a2[1] ? p[i].a2[0] : p[i].a2[1];
+		if (max < p[i].a2[0]) max = p[i].a2[0];
+		if (max < p[i].a2[1]) max = p[i].a2[1];
+		//printf("%d 0x%p\n", i, p[i]);
+	}
+	printf("max %d\n", max); // 16
+	printf("%d\n", *(int*)(pThis + 0x7560));
+	//memset(p, 0, 50*50*12);
+}
+
+void Test1()
+{
+	char* sr = EMUPOINTER<char*>(0x08BADB44);
+	for (int i = 0; i < 4; i++)
+	{
+		sr[i] = 0;
+	}
+
+	for (int32_t i = CPools_ms_pPedPool->m_nSize - 1; i >= 0; i--)
+	{
+		if (CPools_GetSlotIsFree(CPools_ms_pPedPool, i)) { continue; }
+		CEntity* p = (CEntity*)CPools_GetSlot(CPools_ms_pPedPool, i, 3344);
+		if (p) {
+			int32_t mindex = p->m_modelIndex;
+
+			//CBaseModelInfo* mi = GetModelInfo(mindex);
+			if (mindex == 146) // phc
+			{
+				{
+					*EMUPOINTER<int*>(0x08A113F8) = 0x00'00'00'00; // CTimer::ms_fTimeStep = (v1 * CTimer::ms_fTimeScale) / 5898240.0;
+					*EMUPOINTER<int*>(0x08A11480) = 0x00'00'00'00; // CTimer::ms_fTimeStep
+					*EMUPOINTER<int*>(0x08A6A3C4) = 0x00'00'00'00; // CTimer::ms_fTimeStep
+					*EMUPOINTER<int*>(0x08A6A474) = 0x00'00'00'00; // CTimer::ms_fTimeStep
+					*EMUPOINTER<int*>(0x08A6A514) = 0x00'00'00'00; // CTimer::ms_fTimeStep
+					*EMUPOINTER<float*>(0x08BB3B5C) = 1.0f;
+				}
+
+				CVector2D* m_vecAnimMoveDelta = OFFSET(p, 0x318, CVector2D*);
+				printf("146!!!! 0x%p   0x%p  %d\n", p, PSPTRANSLATE(p), !!(p->CE_flags_B&2));
+				//p->bUsesCollision = true;
+				//*OFFSET(p, 0x6F4, char*) = 0; // 0xF0
+				printf("entity status: %d %s\n", GetEntityStatus(p), GetEntityStatusStr(p));
+				printf("pos %f %f %f\n", p->CPlaceable.m_pMat.pos.x, p->CPlaceable.m_pMat.pos.y, p->CPlaceable.m_pMat.pos.z);
+				printf("anim %f %f  0x%p\n", m_vecAnimMoveDelta->x, m_vecAnimMoveDelta->y, PSPTRANSLATE(m_vecAnimMoveDelta));
+				printf("%d\n", !!(*OFFSET(p, 0x000001C8, char*)&1));
+				//m_vecAnimMoveDelta->x = 5.0f;
+				//m_vecAnimMoveDelta->y = 5.0f;
+			}
+		}
+	}
+}
+
+void Test2()
+{
+	float& ms_fWheelAngle = *EMUPOINTER<float*>(0x08BAAC38);
+	printf("%f\n", ms_fWheelAngle);
+	//ms_fWheelAngle = rand() % 3;
+}
+
+void DumpCombatMovesToFile(CCombatMoves* pMoves, const char* filename)
+{
+	FILE* f = std::fopen(filename, "w");
+	if (!f) return;
+
+	enum
+	{
+		NONE,
+		SECTION_A, // CCombatMoves,   count
+		SECTION_B, // CCombatMoveData_A_A
+		SECTION_C, // CCombatMove
+		SECTION_D, // CCombatMoveData_B_A
+	};
+
+	struct CSectionLayout {
+		int32_t structSize;
+		std::map<size_t, size_t> skips; // offset -> size, пропуск (например указателей)
+	};
+
+	// индекс таблицы = значение enum
+	static const CSectionLayout layout[] = {
+		/*NONE*/      { 0, {} },
+		/*SECTION_A*/ { sizeof(CCombatMoves), {
+			{ offsetof(CCombatMoves, m_DataA) + offsetof(CCombatMoveData_A, field_0),  sizeof(void*) },
+			{ offsetof(CCombatMoves, m_MovesData) + offsetof(CCombatMoveData,   m_aMoves), sizeof(void*) },
+			{ offsetof(CCombatMoves, m_DataB) + offsetof(CCombatMoveData_B, field_0),  sizeof(void*) },
+			{ offsetof(CCombatMoves, m_pEntity),                                           sizeof(void*) },
+		}},
+		/*SECTION_B*/ { sizeof(CCombatMoveData_A_A), { } },
+		/*SECTION_C*/ { sizeof(CCombatMove), {
+			{ offsetof(CCombatMove, ptr_field_20), sizeof(void*) },
+			{ offsetof(CCombatMove, ptr_field_24), sizeof(void*) },
+		}},
+		/*SECTION_D*/ { sizeof(CCombatMoveData_B_A), { } },
+	};
+
+	// печатает POD-байты структуры, пропуская диапазоны из таблицы
+	auto emit = [&](const CSectionLayout& L, const uint8_t* base) {
+		size_t caret = 0, wrote = 0, skipSum = 0;
+		for (auto& kv : L.skips) skipSum += kv.second;
+
+		while (caret < (size_t)L.structSize) {
+			auto it = L.skips.find(caret);
+			if (it != L.skips.end()) {
+				caret += it->second;
+				continue;
+			}
+			std::fprintf(f, " 0x%02X", base[caret]);
+			caret++; wrote++;
+		}
+		assert(wrote == (size_t)L.structSize - skipSum && "POD stream size mismatch");
+	};
+
+	// SECTION_A - CCombatMoves
+	std::fprintf(f, "id1\n[0]");
+	emit(layout[SECTION_A], (const uint8_t*)pMoves);
+	std::fprintf(f, "\nend\n\n");
+
+	// SECTION_B - CCombatMoveData_A_A
+	std::fprintf(f, "id2\n");
+	{
+		CCombatMoveData_A_A** arr = EMUPOINTER<CCombatMoveData_A_A**>(pMoves->m_DataA.field_0);
+		for (int i = 0; i < pMoves->m_DataA.m_nCount; i++) {
+			CCombatMoveData_A_A* entry = EMUPOINTER<CCombatMoveData_A_A*>(arr[i]);
+			std::fprintf(f, "[%d]", i);
+			emit(layout[SECTION_B], (const uint8_t*)entry);
+			std::fprintf(f, "\n");
+		}
+	}
+	std::fprintf(f, "end\n\n");
+
+	// SECTION_C - CCombatMove
+	std::fprintf(f, "id3\n");
+	{
+		CCombatMove* arr = EMUPOINTER<CCombatMove*>(pMoves->m_MovesData.m_aMoves);
+		for (int i = 0; i < pMoves->m_MovesData.m_nMoveCount; i++) {
+			std::fprintf(f, "[%d]", i);
+			emit(layout[SECTION_C], (const uint8_t*)&arr[i]);
+			std::fprintf(f, "\n");
+		}
+	}
+	std::fprintf(f, "end\n\n");
+
+	// SECTION_D - CCombatMoveData_B_A
+	std::fprintf(f, "id4\n");
+	{
+		CCombatMoveData_B_A* arr = EMUPOINTER<CCombatMoveData_B_A*>(pMoves->m_DataB.field_0);
+		for (int i = 0; i < pMoves->m_DataB.m_nCount; i++) {
+			std::fprintf(f, "[%d]", i);
+			emit(layout[SECTION_D], (const uint8_t*)&arr[i]);
+			std::fprintf(f, "\n");
+		}
+	}
+	std::fprintf(f, "end\n\n");
+
+	std::fclose(f);
+}
+
+void DumpCombatStatsToFile(CCombatStats* pStats, const char* filename)
+{
+	FILE* f = std::fopen(filename, "w");
+	if (!f) return;
+
+	int numStats = pStats->m_nNumStats;
+
+	enum
+	{
+		NONE,
+		SECTION_A, // CCombatStats,  count
+		SECTION_B, // CCombatStat
+		SECTION_C, // CCombatStat_A
+		SECTION_D, // CCombatStat_B
+		SECTION_E, // CCombatStat_B_A
+	};
+
+	struct CSectionLayout {
+		int32_t structSize;
+		std::map<size_t, size_t> skips; // offset -> size, пропуск (например указателей)
+	};
+
+	// индекс таблицы = значение enum
+	static const CSectionLayout layout[] = {
+		/*NONE*/      { 0, {} },
+		/*SECTION_A*/ { sizeof(CCombatStats),    { { offsetof(CCombatStats,   m_aStats), sizeof(void*) } } },
+		/*SECTION_B*/ { sizeof(CCombatStat),     { { offsetof(CCombatStat,    m_aArr_A), sizeof(void*) },
+												   { offsetof(CCombatStat,    m_aArr_B), sizeof(void*) } } },
+		/*SECTION_C*/ { sizeof(CCombatStat_A),   { } },
+		/*SECTION_D*/ { sizeof(CCombatStat_B),   { { offsetof(CCombatStat_B,  m_pData),  sizeof(void*) } } },
+		/*SECTION_E*/ { sizeof(CCombatStat_B_A), { } },
+	};
+
+	// печатает POD-байты структуры, пропуская диапазоны из таблицы
+	auto emit = [&](const CSectionLayout& L, const uint8_t* base) {
+		size_t caret = 0, wrote = 0, skipSum = 0;
+		for (auto& kv : L.skips) skipSum += kv.second;
+
+		while (caret < (size_t)L.structSize) {
+			auto it = L.skips.find(caret);
+			if (it != L.skips.end()) {
+				caret += it->second;
+				continue;
+			}
+			std::fprintf(f, " 0x%02X", base[caret]);
+			caret++; wrote++;
+		}
+		assert(wrote == (size_t)L.structSize - skipSum && "POD stream size mismatch");
+	};
+
+	// SECTION_A - CCombatStats
+	std::fprintf(f, "id1\n[0]");
+	emit(layout[SECTION_A], (const uint8_t*)pStats);
+	std::fprintf(f, "\nend\n\n");
+
+	// SECTION_B - CCombatStat
+	std::fprintf(f, "id2\n");
+	for (int i = 0; i < numStats; i++) {
+		CCombatStat* pStat = &EMUPOINTER<CCombatStat*>(pStats->m_aStats)[i];
+		std::fprintf(f, "[%d]", i);
+		emit(layout[SECTION_B], (const uint8_t*)pStat);
+		std::fprintf(f, "\n");
+	}
+	std::fprintf(f, "end\n\n");
+
+	// SECTION_C - CCombatStat_A
+	std::fprintf(f, "id3\n");
+	for (int i = 0; i < numStats; i++) {
+		CCombatStat* pStat = &EMUPOINTER<CCombatStat*>(pStats->m_aStats)[i];
+		CCombatStat_A* a = EMUPOINTER<CCombatStat_A*>(pStat->m_aArr_A);
+		for (int j = 0; j < pStat->m_nCount_A; j++) {
+			std::fprintf(f, "[%d][%d]", i, j);
+			emit(layout[SECTION_C], (const uint8_t*)&a[j]);
+			std::fprintf(f, "\n");
+		}
+	}
+	std::fprintf(f, "end\n\n");
+
+	// SECTION_D - CCombatStat_B
+	std::fprintf(f, "id4\n");
+	for (int i = 0; i < numStats; i++) {
+		CCombatStat* pStat = &EMUPOINTER<CCombatStat*>(pStats->m_aStats)[i];
+		CCombatStat_B* arr = EMUPOINTER<CCombatStat_B*>(pStat->m_aArr_B);
+		for (int j = 0; j < pStat->m_nCount_B; j++) {
+			std::fprintf(f, "[%d][%d]", i, j);
+			emit(layout[SECTION_D], (const uint8_t*)&arr[j]);
+			std::fprintf(f, "\n");
+		}
+	}
+	std::fprintf(f, "end\n\n");
+
+	// SECTION_E - CCombatStat_B_A
+	std::fprintf(f, "id5\n");
+	for (int i = 0; i < numStats; i++) {
+		CCombatStat* pStat = &EMUPOINTER<CCombatStat*>(pStats->m_aStats)[i];
+		CCombatStat_B* arr = EMUPOINTER<CCombatStat_B*>(pStat->m_aArr_B);
+		for (int j = 0; j < pStat->m_nCount_B; j++) {
+			CCombatStat_B_A* ba = EMUPOINTER<CCombatStat_B_A*>(arr[j].m_pData);
+			std::fprintf(f, "[%d][%d]", i, j);
+			emit(layout[SECTION_E], (const uint8_t*)ba);
+			std::fprintf(f, "\n");
+		}
+	}
+	std::fprintf(f, "end\n\n");
+
+	std::fclose(f);
+}
+
+void DumpCombat2F()
+{
+	return;
+	const char* pMovesFile = "COMBATMOVES.DAT";
+	const char* pStatsFile = "COMBATSTATS.DAT";
+
+
+	CCombatMoves* pMoves = (CCombatMoves*)gpFightMoves;
+	CCombatStats* pStats = (CCombatStats*)gpFightStats;
+
+	DumpCombatMovesToFile(pMoves, pMovesFile);
+	DumpCombatStatsToFile(pStats, pStatsFile);
+
+
+	//for (int32_t i = 0; i < pStats->m_nNumStats; i++)
+	//{
+	//	CCombatStat* pStat = &EMUPOINTER<CCombatStat*>(pStats->m_aStats)[i];
+	//	
+	//	printf("%d %d\n", pStats->m_nNumStats, pStat->m_nCount_A);
+	//}
+
+
+	printf("DumpCombat done\n");
+	Sleep(50000000);
+}
+
+
 bool quit = false;
+bool poll = false;
 void MainUpd()
 {
 	//LogCombat();
 	//LogH();
 
+	if(poll){
+		if((GetAsyncKeyState(VK_SHIFT) & 0x8000) == 0)
+		system("cls");
+		//LogRadar();
+		//Test1();
+		Test2();
+	}
+
 	if (BTN('T'))
 	{
+		DumpCombat2F();
+		Test2();
+		//poll^=1;
 		LogMenu();
+		//LogCustomTracks();
+		//LogRadar();
+		LogFont();
+		LogPath();
+		//LogMemoryTest();
 		//TestModelInfo();
 		Sleep(500);
 	}
 
+	//char* pdma = EMUPOINTER<char*>(0x08BAFB5C);
+	//pdma[0] = rand() % 2;
+	//pdma[1] = rand() % 2;
+	//pdma[2] = rand() % 2;
+	//pdma[3] = rand() % 2;
 	//if (bPatchMp) {
 	//	bPatchMp = false;
 	//	PatchNoMPCars(); // once, load state restore patch!!
