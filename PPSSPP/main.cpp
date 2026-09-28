@@ -1118,30 +1118,98 @@ struct tCombatMove
 class CCombatMoveData_A_A
 {
 public:
-	uint8_t field_0[0x18]; // min field p2-p1, or min 0x8 unk_973DD44. 0x18 точно, мб меньше
+	uint8_t field_0[24]; // min field p2-p1, or min 0x8 unk_973DD44. 0x18 точно, мб меньше
 };
 
 class CCombatMoveData_A
 {
 public:
-	CCombatMoveData_A_A** field_0; // 4 ptr to pointers (16b) [p1,p2,p3,p4]
+	CCombatMoveData_A_A** m_aArr; // 4 ptr to pointers (16b) [p1,p2,p3,p4]
 	int32_t m_nCount; // 4
 };
+static_assert(sizeof(CCombatMoveData_A) == 0x08 - (4) + (sizeof(void*)), "sizeof(CCombatMoveData_A) == 0x08");
+
+class CCombatMove_A // sub_881E290
+{
+public:
+	uint8_t field_0[8]; // what about CCombatMoveData_B_A
+	uint8_t field_8[24];
+};
+static_assert(sizeof(CCombatMove_A) == 0x20, "sizeof(CCombatMove_A) == 0x20");
+
+class CCombatMove_B_A // what about CCombatStat_B_A // recheck probably int32
+{
+public:
+	uint8_t field_0[4];
+};
+
+class CCombatMove_B // sub_881E1C0
+{
+public:
+	int32_t field_0;
+	int32_t field_4;
+	CCombatMove_B_A* m_aArr;
+	uint8_t field_C;
+	uint8_t m_nCount;
+	uint8_t field_E[10];
+};
+static_assert(sizeof(CCombatMove_B) == 0x18 - (4) + (sizeof(void*)), "sizeof(CCombatMove_B) == 0x18");
 
 class CCombatMove
 {
 public:
 	uint8_t field_0[16];
 	CVuVector vec_field_10;
-	void* ptr_field_20; // reloc todo
-	void* ptr_field_24; // reloc todo
+	CCombatMove_A* m_aArr_A;
+	CCombatMove_B* m_aArr_B;
 	int16_t m_nDelta;
-	int8_t m_nFlags;
-	int8_t field_2B;
-	int8_t flags_field_2C;
-	uint8_t field_2D[6];
-	char m_name[11];
-	uint8_t field_3E;
+
+	// Flags A
+	uint8_t b2A_1 : 1;
+	uint8_t b2A_2 : 1;
+	uint8_t b2A_4 : 1;
+	uint8_t b2A_8 : 1;
+	uint8_t b2A_10 : 1;
+	uint8_t b2A_20 : 1;
+	uint8_t b2A_40 : 1;
+	uint8_t b2A_80 : 1;
+
+	// Flags B // recheck
+	uint8_t b2B_1 : 1;
+	uint8_t b2B_2 : 1;
+	uint8_t b2B_4 : 1;
+	uint8_t b2B_8 : 1;
+	uint8_t b2B_10 : 1;
+	uint8_t b2B_20 : 1;
+	uint8_t b2B_40 : 1;
+	uint8_t b2B_80 : 1;
+
+	// Flags C
+	uint8_t b2C_1 : 1;
+	uint8_t b2C_2 : 1;
+	uint8_t b2C_4 : 1;
+	uint8_t b2C_8 : 1;
+	uint8_t b2C_10 : 1;
+	uint8_t b2C_20 : 1;
+	uint8_t b2C_40 : 1;
+	uint8_t b2C_80 : 1;
+
+	// Flags D // recheck
+	uint8_t b2D_1 : 1;
+	uint8_t b2D_2 : 1;
+	uint8_t b2D_4 : 1;
+	uint8_t b2D_8 : 1;
+	uint8_t b2D_10 : 1;
+	uint8_t b2D_20 : 1;
+	uint8_t b2D_40 : 1;
+	uint8_t b2D_80 : 1;
+
+	uint8_t field_2E;
+	uint8_t m_nCount_B;
+	uint8_t m_nCount_A;
+	uint8_t field_31;
+	uint8_t field_32;
+	char m_name[12];
 	uint8_t field_3F;
 };
 static_assert(sizeof(CCombatMove) == 0x40 - (4 * 2) + (sizeof(void*) * 2), "sizeof(CCombatMove) == 0x40");
@@ -1162,24 +1230,22 @@ public:
 class CCombatMoveData_B
 {
 public:
-	CCombatMoveData_B_A* field_0;
+	CCombatMoveData_B_A* m_aArr;
 	int32_t m_nCount; // 53 // 0x35
 };
 
 class CCombatMoves
 {
 public:
-	CCombatMoveData_A m_DataA;   // 0x04
-	CCombatMoveData m_MovesData; // 0x68
-	CCombatMoveData_B m_DataB;   // 0x35
-	CEntity* m_pEntity;
-	int8_t field_1C;
-	int8_t field_1D;
-	uint8_t field_1E[8];
-	int8_t field_26; // sub_881EE20 combat
-	uint8_t field_27[0xD1]; // 4 ptr, todo probably pad or smaller size (pChunk-pS+funOff)
+    CCombatMoveData_A m_DataA;   // 0x04
+    CCombatMoveData m_MovesData; // 0x68
+    CCombatMoveData_B m_DataB;   // 0x35
+    CEntity* m_pEntity;
+    uint8_t field_1C[12];
+
+    static void Initialise(const char* pFileName);
 };
-static_assert(sizeof(CCombatMoves) == 0xF8 - (4 * 4) + (sizeof(void*) * 4), "sizeof(CCombatMoves) == 0xF8"); // can be smaller, todo find CCombatMoves max offset
+static_assert(sizeof(CCombatMoves) == 0x28-(4*4)+(sizeof(void*)*4), "sizeof(CCombatMoves) == 0x28");
 
 
 class CCombatStat_A
@@ -4222,6 +4288,9 @@ void DumpCombatMovesToFile(CCombatMoves* pMoves, const char* filename)
 		SECTION_B, // CCombatMoveData_A_A
 		SECTION_C, // CCombatMove
 		SECTION_D, // CCombatMoveData_B_A
+		SECTION_E, // CCombatMove_A
+		SECTION_F, // CCombatMove_B
+		SECTION_G, // CCombatMove_B_A
 	};
 
 	struct CSectionLayout {
@@ -4233,17 +4302,22 @@ void DumpCombatMovesToFile(CCombatMoves* pMoves, const char* filename)
 	static const CSectionLayout layout[] = {
 		/*NONE*/      { 0, {} },
 		/*SECTION_A*/ { sizeof(CCombatMoves), {
-			{ offsetof(CCombatMoves, m_DataA) + offsetof(CCombatMoveData_A, field_0),  sizeof(void*) },
+			{ offsetof(CCombatMoves, m_DataA) + offsetof(CCombatMoveData_A, m_aArr), sizeof(void*) },
 			{ offsetof(CCombatMoves, m_MovesData) + offsetof(CCombatMoveData,   m_aMoves), sizeof(void*) },
-			{ offsetof(CCombatMoves, m_DataB) + offsetof(CCombatMoveData_B, field_0),  sizeof(void*) },
-			{ offsetof(CCombatMoves, m_pEntity),                                           sizeof(void*) },
+			{ offsetof(CCombatMoves, m_DataB) + offsetof(CCombatMoveData_B, m_aArr), sizeof(void*) },
+			{ offsetof(CCombatMoves, m_pEntity), sizeof(void*) },
 		}},
 		/*SECTION_B*/ { sizeof(CCombatMoveData_A_A), { } },
 		/*SECTION_C*/ { sizeof(CCombatMove), {
-			{ offsetof(CCombatMove, ptr_field_20), sizeof(void*) },
-			{ offsetof(CCombatMove, ptr_field_24), sizeof(void*) },
+			{ offsetof(CCombatMove, m_aArr_A), sizeof(void*) },
+			{ offsetof(CCombatMove, m_aArr_B), sizeof(void*) },
 		}},
 		/*SECTION_D*/ { sizeof(CCombatMoveData_B_A), { } },
+		/*SECTION_E*/ { sizeof(CCombatMove_A), { } },
+		/*SECTION_F*/ { sizeof(CCombatMove_B), {
+			{ offsetof(CCombatMove_B, m_aArr), sizeof(void*) },
+		}},
+		/*SECTION_G*/ { sizeof(CCombatMove_B_A), { } },
 	};
 
 	// печатает POD-байты структуры, пропуская диапазоны из таблицы
@@ -4271,7 +4345,7 @@ void DumpCombatMovesToFile(CCombatMoves* pMoves, const char* filename)
 	// SECTION_B - CCombatMoveData_A_A
 	std::fprintf(f, "id2\n");
 	{
-		CCombatMoveData_A_A** arr = EMUPOINTER<CCombatMoveData_A_A**>(pMoves->m_DataA.field_0);
+		CCombatMoveData_A_A** arr = EMUPOINTER<CCombatMoveData_A_A**>(pMoves->m_DataA.m_aArr);
 		for (int i = 0; i < pMoves->m_DataA.m_nCount; i++) {
 			CCombatMoveData_A_A* entry = EMUPOINTER<CCombatMoveData_A_A*>(arr[i]);
 			std::fprintf(f, "[%d]", i);
@@ -4283,24 +4357,61 @@ void DumpCombatMovesToFile(CCombatMoves* pMoves, const char* filename)
 
 	// SECTION_C - CCombatMove
 	std::fprintf(f, "id3\n");
-	{
-		CCombatMove* arr = EMUPOINTER<CCombatMove*>(pMoves->m_MovesData.m_aMoves);
-		for (int i = 0; i < pMoves->m_MovesData.m_nMoveCount; i++) {
-			std::fprintf(f, "[%d]", i);
-			emit(layout[SECTION_C], (const uint8_t*)&arr[i]);
-			std::fprintf(f, "\n");
-		}
+	CCombatMove* moves = EMUPOINTER<CCombatMove*>(pMoves->m_MovesData.m_aMoves);
+	for (int i = 0; i < pMoves->m_MovesData.m_nMoveCount; i++) {
+		std::fprintf(f, "[%d]", i);
+		emit(layout[SECTION_C], (const uint8_t*)&moves[i]);
+		std::fprintf(f, "\n");
 	}
 	std::fprintf(f, "end\n\n");
 
 	// SECTION_D - CCombatMoveData_B_A
 	std::fprintf(f, "id4\n");
 	{
-		CCombatMoveData_B_A* arr = EMUPOINTER<CCombatMoveData_B_A*>(pMoves->m_DataB.field_0);
+		CCombatMoveData_B_A* arr = EMUPOINTER<CCombatMoveData_B_A*>(pMoves->m_DataB.m_aArr);
 		for (int i = 0; i < pMoves->m_DataB.m_nCount; i++) {
 			std::fprintf(f, "[%d]", i);
 			emit(layout[SECTION_D], (const uint8_t*)&arr[i]);
 			std::fprintf(f, "\n");
+		}
+	}
+	std::fprintf(f, "end\n\n");
+
+	// SECTION_E - CCombatMove_A
+	std::fprintf(f, "id5\n");
+	for (int i = 0; i < pMoves->m_MovesData.m_nMoveCount; i++) {
+		CCombatMove_A* arrA = EMUPOINTER<CCombatMove_A*>(moves[i].m_aArr_A);
+		for (int j = 0; j < moves[i].m_nCount_A; j++) {
+			std::fprintf(f, "[%d][%d]", i, j);
+			emit(layout[SECTION_E], (const uint8_t*)&arrA[j]);
+			std::fprintf(f, "\n");
+		}
+	}
+	std::fprintf(f, "end\n\n");
+
+	// SECTION_F - CCombatMove_B
+	std::fprintf(f, "id6\n");
+	for (int i = 0; i < pMoves->m_MovesData.m_nMoveCount; i++) {
+		CCombatMove_B* arrB = EMUPOINTER<CCombatMove_B*>(moves[i].m_aArr_B);
+		for (int j = 0; j < moves[i].m_nCount_B; j++) {
+			std::fprintf(f, "[%d][%d]", i, j);
+			emit(layout[SECTION_F], (const uint8_t*)&arrB[j]);
+			std::fprintf(f, "\n");
+		}
+	}
+	std::fprintf(f, "end\n\n");
+
+	// SECTION_G - CCombatMove_B_A
+	std::fprintf(f, "id7\n");
+	for (int i = 0; i < pMoves->m_MovesData.m_nMoveCount; i++) {
+		CCombatMove_B* arrB = EMUPOINTER<CCombatMove_B*>(moves[i].m_aArr_B);
+		for (int j = 0; j < moves[i].m_nCount_B; j++) {
+			CCombatMove_B_A* arrBA = EMUPOINTER<CCombatMove_B_A*>(arrB[j].m_aArr);
+			for (int k = 0; k < arrB[j].m_nCount; k++) {
+				std::fprintf(f, "[%d][%d][%d]", i, j, k);
+				emit(layout[SECTION_G], (const uint8_t*)&arrBA[k]);
+				std::fprintf(f, "\n");
+			}
 		}
 	}
 	std::fprintf(f, "end\n\n");
@@ -4418,7 +4529,7 @@ void DumpCombatStatsToFile(CCombatStats* pStats, const char* filename)
 
 void DumpCombat2F()
 {
-	return;
+	//return;
 	const char* pMovesFile = "COMBATMOVES.DAT";
 	const char* pStatsFile = "COMBATSTATS.DAT";
 
@@ -4430,12 +4541,14 @@ void DumpCombat2F()
 	DumpCombatStatsToFile(pStats, pStatsFile);
 
 
-	//for (int32_t i = 0; i < pStats->m_nNumStats; i++)
-	//{
-	//	CCombatStat* pStat = &EMUPOINTER<CCombatStat*>(pStats->m_aStats)[i];
-	//	
-	//	printf("%d %d\n", pStats->m_nNumStats, pStat->m_nCount_A);
-	//}
+	for (int32_t i = 0; i < pMoves->m_MovesData.m_nMoveCount; i++)
+	{
+		CCombatMove* pMoves2 = &EMUPOINTER<CCombatMove*>(pMoves->m_MovesData.m_aMoves)[i];
+		//pMoves2->ptr_field_20 = 0; // +=32 _881E290
+		//pMoves2->ptr_field_24 = 0;
+
+		//printf("%d\n", pStats->m_nNumStats);
+	}
 
 
 	printf("DumpCombat done\n");
