@@ -1115,20 +1115,10 @@ struct tCombatMove
 };
 
 //#pragma pack(push, 1)
-class CCombatMoveData_A_A // what about CCombatMove_B_A CCombatStat_B_A ??
-{
-public:
-	uint8_t field_0;
-	uint8_t field_1;
-	uint8_t field_2;
-	uint8_t field_3;
-};
-static_assert(sizeof(CCombatMoveData_A_A) == 4, "sizeof(CCombatMoveData_A_A) == 4");
-
 class CCombatMoveData_A
 {
 public:
-	CCombatMoveData_A_A** m_aArr; // 4 ptr to pointers (16b) [p1,p2,p3,p4]
+	uint8_t** m_aArr; // 4 ptr to pointers (16b) [p1,p2,p3,p4] // [4][N] // 255(0xFF) delim (CCombatMoves::ReactionListContains, find by read bp)
 	int32_t m_nCount; // 4
 };
 static_assert(sizeof(CCombatMoveData_A) == 0x08 - (4) + (sizeof(void*)), "sizeof(CCombatMoveData_A) == 0x08");
@@ -1164,7 +1154,18 @@ public:
 	uint8_t field_4[4]; // what about CCombatMoveData_B_A
 	uint64_t m_nWeaponsMask;
 	CCombatMove_A_B* m_aArr_B; // CCombatStat_B_A? CCombatMoveData_A_A?
-	uint8_t m_aMovesIndices[12]; // m_aSpecialMove ?
+	uint8_t field_14;
+	uint8_t field_15;
+	uint8_t field_16;
+	uint8_t m_nCount_A;
+	uint8_t m_nCount_B;
+	uint8_t field_19;
+	uint8_t field_1A;
+	uint8_t field_1B;
+	uint8_t field_1C;
+	uint8_t field_1D;
+	uint8_t field_1E;
+	uint8_t field_1F;
 };
 static_assert(sizeof(CCombatMove_A) == 0x20 -(4*2)+(sizeof(void*)*2), "sizeof(CCombatMove_A) == 0x20");
 
@@ -2877,44 +2878,96 @@ void FixupEtc()
 				//GEN_FIX_OFFSET(file, pspMoves, "CCombatMoves", "CCombatMoves_main");
 
 				// === SECTION B : CCombatMoveData_A_A[] (m_DataA.m_aArr) ===
+////				if (pMoves->m_DataA.m_nCount > 0 && pMoves->m_DataA.m_aArr)
+////				{
+////////#if 0 // ставим каждый елемент как CCombatMoveData_A_A*, ставим объект указани€ CCombatMoveData_A_A и групируем масив указателей но не работает тер€ет в void*
+////////					// ¬ј∆Ќќ: каст к uint32_t ƒќ арифметики, иначе компил€тор
+////////					// домножит i*sizeof(void*) ещЄ раз на sizeof(CCombatMoveData_A_A*)
+////////					uint32_t pBaseArr = (uint32_t)pMoves->m_DataA.m_aArr;
+////////					for (int32_t i = 0; i < pMoves->m_DataA.m_nCount; i++)
+////////					{
+////////						// адрес i-й €чейки массива (по 4 байта)
+////////						uint32_t pSlot = pBaseArr + (uint32_t)(i * sizeof(void*));
+////////
+////////						// (1) тип самой €чейки: CCombatMoveData_A_A* (только тип, им€ не ставим Ч
+////////						//     его поставит MakeArray позже)
+////////						GEN_FIX_OFFSET(file, pSlot, "CCombatMoveData_A_A*", "", /*typeOnly*/true); // елемент масива указателей
+////////
+////////						// (2) тип того, на что указывает €чейка: CCombatMoveData_A_A
+////////						uint32_t pElem = *EMUPOINTER<uint32_t*>(pSlot);
+////////						if (!pElem) continue;
+////////
+////////						sprintf(buff, "CCombatMoveData_A_A_%d", i);
+////////						GEN_FIX_OFFSET(file, pElem, "CCombatMoveData_A_A", buff);
+////////					}
+////////
+////////					// (3) MakeArray по базе
+////////					sprintf(buff, "CCombatMoveData_A_A_aArr");
+////////					GEN_FIX_OFFSET(file, pBaseArr, "CCombatMoveData_A_A*", buff,
+////////						/*typeOnly*/false, pMoves->m_DataA.m_nCount, /*nameOnly*/false);
+////////
+////////					// (4) MakeArray сбрасывает им€ -> восстанавливаем
+////////					GEN_FIX_OFFSET(file, pBaseArr, "", buff, false, 0, /*nameOnly*/true);
+////////#endif
+////					sprintf(buff, "CCombatMoveData_A_aArr");
+////					GEN_FIX_OFFSET(file, (uint32_t)pMoves->m_DataA.m_aArr, "", buff,
+////						/*typeOnly*/false, pMoves->m_DataA.m_nCount, /*nameOnly*/false);
+////
+////					char arrayDecl[128];
+////					sprintf(arrayDecl, "CCombatMoveData_A_A *CCombatMoveData_A_A_aArr[%d]", pMoves->m_DataA.m_nCount);
+////					GEN_ARRAY(file, (uint32_t)pMoves->m_DataA.m_aArr, arrayDecl);
+////				}
+
 				if (pMoves->m_DataA.m_nCount > 0 && pMoves->m_DataA.m_aArr)
 				{
-#if 0 // ставим каждый елемент как CCombatMoveData_A_A*, ставим объект указани€ CCombatMoveData_A_A и групируем масив указателей но не работает тер€ет в void*
-					// ¬ј∆Ќќ: каст к uint32_t ƒќ арифметики, иначе компил€тор
-					// домножит i*sizeof(void*) ещЄ раз на sizeof(CCombatMoveData_A_A*)
 					uint32_t pBaseArr = (uint32_t)pMoves->m_DataA.m_aArr;
-					for (int32_t i = 0; i < pMoves->m_DataA.m_nCount; i++)
+
+					for (int32_t i = 0; i < pMoves->m_DataA.m_nCount; i++) // 4 указател€
 					{
-						// адрес i-й €чейки массива (по 4 байта)
+						// (1) тип самого элемента массива указателей: unsigned __int8*
 						uint32_t pSlot = pBaseArr + (uint32_t)(i * sizeof(void*));
+						GEN_FIX_OFFSET(file, pSlot, "unsigned __int8*", "", /*typeOnly*/true);
 
-						// (1) тип самой €чейки: CCombatMoveData_A_A* (только тип, им€ не ставим Ч
-						//     его поставит MakeArray позже)
-						GEN_FIX_OFFSET(file, pSlot, "CCombatMoveData_A_A*", "", /*typeOnly*/true); // елемент масива указателей
-
-						// (2) тип того, на что указывает €чейка: CCombatMoveData_A_A
+						// (2) сам байтовый массив
 						uint32_t pElem = *EMUPOINTER<uint32_t*>(pSlot);
 						if (!pElem) continue;
 
-						sprintf(buff, "CCombatMoveData_A_A_%d", i);
-						GEN_FIX_OFFSET(file, pElem, "CCombatMoveData_A_A", buff);
+						uint8_t* bytes = EMUPOINTER<uint8_t*>(pElem);
+
+						// сканируем до 0xFF включительно
+						const int32_t kMaxScan = 4096; // sanity limit
+						int32_t size = 0;
+						bool bFoundTerminator = false;
+						while (size < kMaxScan) {
+							if (bytes[size] == 0xFF) { ++size; bFoundTerminator = true; break; }
+							++size;
+						}
+						if (!bFoundTerminator)
+							continue; // битые данные Ч пропускаем
+
+						// (3) тип + им€ байтового массива: unsigned __int8
+						sprintf(buff, "CCombatMoveData_A_%d", i);
+						GEN_FIX_OFFSET(file, pElem, "unsigned __int8", buff);
+
+						// (4) MakeArray на найденный размер (0xFF включЄн в size)
+						GEN_FIX_OFFSET(file, pElem, "", buff, /*typeOnly*/false, size, /*nameOnly*/false);
+
+						// (5) MakeArray сбрасывает им€ Ч восстанавливаем
+						GEN_FIX_OFFSET(file, pElem, "", buff, /*typeOnly*/false, 0, /*nameOnly*/true);
 					}
 
-					// (3) MakeArray по базе
-					sprintf(buff, "CCombatMoveData_A_A_aArr");
-					GEN_FIX_OFFSET(file, pBaseArr, "CCombatMoveData_A_A*", buff,
+					// (6) массив указателей: MakeArray + им€
+					sprintf(buff, "CCombatMoveData_A_aArr");
+					GEN_FIX_OFFSET(file, pBaseArr, "", buff,
 						/*typeOnly*/false, pMoves->m_DataA.m_nCount, /*nameOnly*/false);
 
-					// (4) MakeArray сбрасывает им€ -> восстанавливаем
-					GEN_FIX_OFFSET(file, pBaseArr, "", buff, false, 0, /*nameOnly*/true);
-#endif
-					sprintf(buff, "CCombatMoveData_A_A_aArr");
-					GEN_FIX_OFFSET(file, (uint32_t)pMoves->m_DataA.m_aArr, "", buff,
-						/*typeOnly*/false, pMoves->m_DataA.m_nCount, /*nameOnly*/false);
+					// (7) MakeArray сбрасывает им€ Ч восстанавливаем
+					GEN_FIX_OFFSET(file, pBaseArr, "", buff, /*typeOnly*/false, 0, /*nameOnly*/true);
 
+					// (8) финальный тип массива указателей (с [N] в декларации)
 					char arrayDecl[128];
-					sprintf(arrayDecl, "CCombatMoveData_A_A *CCombatMoveData_A_A_aArr[%d]", pMoves->m_DataA.m_nCount);
-					GEN_ARRAY(file, (uint32_t)pMoves->m_DataA.m_aArr, arrayDecl);
+					sprintf(arrayDecl, "unsigned __int8 *CCombatMoveData_A_aArr[%d]", pMoves->m_DataA.m_nCount);
+					GEN_ARRAY(file, pBaseArr, arrayDecl);
 				}
 
 				// === SECTION C / E / F / G : CCombatMove[] (m_MovesData.m_aMoves) ===
@@ -2944,32 +2997,49 @@ void FixupEtc()
 									sprintf(buff, "CCombatMove_A_%d_%d", i, j);
 									GEN_FIX_OFFSET(file, pAPsp, "CCombatMove_A", buff);
 
-									// ---- m_aArr_A : offset 0x00 -> CCombatMove_A_A* ----
-									if (pA->m_aArr_A)
+									// ---- m_aArr_A : offset 0x00 -> CCombatMove_A_A[] (m_nCount_A элементов) ----
+									if (pA->m_aArr_A && pA->m_nCount_A > 0)
 									{
 										uint32_t pArr = (uint32_t)pA->m_aArr_A;
-										// элементы массива Ч цепочка CCombatMove_A_<i>_<j>_A_<k>
-										for (int32_t k = 0; k < 1; k++) // todo count неизвестен, пока 1
+										for (int32_t k = 0; k < pA->m_nCount_A; k++)
 										{
 											uint32_t pElem = pArr + (uint32_t)(k * sizeof(CCombatMove_A_A));
 											sprintf(buff, "CCombatMove_A_%d_%d_A_%d", i, j, k);
 											GEN_FIX_OFFSET(file, pElem, "CCombatMove_A_A", buff);
 										}
+
+										sprintf(buff, "CCombatMove_A_%d_%d_A_arr", i, j);
+										GEN_FIX_OFFSET(file, (uint32_t)pA->m_aArr_A, "CCombatMove_A_A*", buff,
+											false, pA->m_nCount_A, false);
+										GEN_FIX_OFFSET(file, (uint32_t)pA->m_aArr_A, "", buff, false, 0, true);
+
+										char subADecl[128];
+										sprintf(subADecl, "CCombatMove_A_A *CCombatMove_A_%d_%d_A_arr[%d]", i, j, pA->m_nCount_A);
+										GEN_ARRAY(file, (uint32_t)pA->m_aArr_A, subADecl);
 									}
 
-									// ---- m_aArr_B : offset 0x10 -> CCombatMove_A_A* ----
-									if (pA->m_aArr_B)
+									// ---- m_aArr_B : offset 0x10 -> CCombatMove_A_B[] (m_nCount_B элементов) ----
+									if (pA->m_aArr_B && pA->m_nCount_B > 0)
 									{
 										uint32_t pArr = (uint32_t)pA->m_aArr_B;
-										for (int32_t k = 0; k < 1; k++) // todo count неизвестен, пока 1
+										for (int32_t k = 0; k < pA->m_nCount_B; k++)
 										{
 											uint32_t pElem = pArr + (uint32_t)(k * sizeof(CCombatMove_A_B));
 											sprintf(buff, "CCombatMove_A_%d_%d_B_%d", i, j, k);
 											GEN_FIX_OFFSET(file, pElem, "CCombatMove_A_B", buff);
 										}
-									}
 
+										sprintf(buff, "CCombatMove_A_%d_%d_B_arr", i, j);
+										GEN_FIX_OFFSET(file, (uint32_t)pA->m_aArr_B, "CCombatMove_A_B*", buff,
+											false, pA->m_nCount_B, false);
+										GEN_FIX_OFFSET(file, (uint32_t)pA->m_aArr_B, "", buff, false, 0, true);
+
+										char subBDecl[128];
+										sprintf(subBDecl, "CCombatMove_A_B *CCombatMove_A_%d_%d_B_arr[%d]", i, j, pA->m_nCount_B);
+										GEN_ARRAY(file, (uint32_t)pA->m_aArr_B, subBDecl);
+									}
 								}
+
 								sprintf(buff, "CCombatMove_A_%d_arr", i);
 								GEN_FIX_OFFSET(file, (uint32_t)mv->m_aArr_A, "CCombatMove_A*", buff,
 									false, mv->m_nCount_A, false);
@@ -3038,7 +3108,7 @@ void FixupEtc()
 	}
 #endif
 
-#if 0
+#if 1
 		CCombatStats* pStats = (CCombatStats*)gpFightStats;
 		if (pStats)
 		{
@@ -4551,7 +4621,7 @@ void DumpCombatMovesToFile(CCombatMoves* pMoves, const char* filename)
 			{ offsetof(CCombatMoves, m_DataB) + offsetof(CCombatMoveData_B, m_aArr),   sizeof(void*) },
 			{ offsetof(CCombatMoves, m_pEntity), sizeof(void*) },
 		}},
-		/*SECTION_B*/ { sizeof(CCombatMoveData_A_A), { } },
+		/*SECTION_B*/ { 0, { } },
 		/*SECTION_C*/ { sizeof(CCombatMove), {
 			{ offsetof(CCombatMove, m_aArr_A), sizeof(void*) },
 			{ offsetof(CCombatMove, m_aArr_B), sizeof(void*) },
@@ -4590,14 +4660,43 @@ void DumpCombatMovesToFile(CCombatMoves* pMoves, const char* filename)
 	emit(layout[SECTION_A], (const uint8_t*)pMoves);
 	std::fprintf(f, "\nend\n\n");
 
-	// SECTION_B - CCombatMoveData_A_A
+	// SECTION_B - CCombatMoveData_A (raw byte arrays, terminated by 0xFF inclusive, nullable)
 	std::fprintf(f, "id2\n");
 	{
-		CCombatMoveData_A_A** arr = EMUPOINTER<CCombatMoveData_A_A**>(pMoves->m_DataA.m_aArr);
+		uint8_t** arr = EMUPOINTER<uint8_t**>(pMoves->m_DataA.m_aArr);
 		for (int i = 0; i < pMoves->m_DataA.m_nCount; i++) {
-			CCombatMoveData_A_A* entry = EMUPOINTER<CCombatMoveData_A_A*>(arr[i]);
-			std::fprintf(f, "[%d]", i);
-			emit(layout[SECTION_B], (const uint8_t*)entry);
+			uint8_t* bytes = EMUPOINTER<uint8_t*>(arr[i]);
+
+			// null-запись (как в SECTION_F/G)
+			if (!bytes) {
+				std::fprintf(f, "[%d] null\n", i);
+				continue;
+			}
+
+			// —канируем до терминатора 0xFF включительно
+			const int32_t kMaxScan = 4096; // sanity limit
+			int32_t size = 0;
+			bool bFoundTerminator = false;
+			while (size < kMaxScan) {
+				if (bytes[size] == 0xFF) {
+					++size; // включаем 0xFF (как в примере [0] [3] 0x1 0x2 0xFF)
+					bFoundTerminator = true;
+					break;
+				}
+				++size;
+			}
+
+			if (!bFoundTerminator) {
+				std::fprintf(f, "[%d] [%d]", i, size);
+				for (int32_t k = 0; k < size; k++)
+					std::fprintf(f, " 0x%02X", bytes[k]);
+				std::fprintf(f, " ; NO_TERMINATOR\n");
+				continue;
+			}
+
+			std::fprintf(f, "[%d] [%d]", i, size);
+			for (int32_t k = 0; k < size; k++)
+				std::fprintf(f, " 0x%02X", bytes[k]);
 			std::fprintf(f, "\n");
 		}
 	}
@@ -4637,17 +4736,20 @@ void DumpCombatMovesToFile(CCombatMoves* pMoves, const char* filename)
 	}
 	std::fprintf(f, "end\n\n");
 
-	// SECTION_F - CCombatMove_A_A
+	// SECTION_F - CCombatMove_A_A  (k по mvA->m_nCount_A)
 	std::fprintf(f, "id6\n");
 	for (int i = 0; i < pMoves->m_MovesData.m_nMoveCount; i++) {
 		CCombatMove_A* arrA = EMUPOINTER<CCombatMove_A*>(moves[i].m_aArr_A);
 		for (int j = 0; j < moves[i].m_nCount_A; j++) {
-			if (!arrA[j].m_aArr_A) {
+			CCombatMove_A* mvA = &arrA[j];
+
+			if (mvA->m_nCount_A == 0 || !mvA->m_aArr_A) {
 				std::fprintf(f, "[%d][%d][0] null\n", i, j);
 				continue;
 			}
-			CCombatMove_A_A* subA = EMUPOINTER<CCombatMove_A_A*>(arrA[j].m_aArr_A);
-			for (int k = 0; k < 1; k++) {
+
+			CCombatMove_A_A* subA = EMUPOINTER<CCombatMove_A_A*>(mvA->m_aArr_A);
+			for (int k = 0; k < mvA->m_nCount_A; k++) {
 				std::fprintf(f, "[%d][%d][%d]", i, j, k);
 				emit(layout[SECTION_F], (const uint8_t*)&subA[k]);
 				std::fprintf(f, "\n");
@@ -4656,17 +4758,20 @@ void DumpCombatMovesToFile(CCombatMoves* pMoves, const char* filename)
 	}
 	std::fprintf(f, "end\n\n");
 
-	// SECTION_G - CCombatMove_A_B
+	// SECTION_G - CCombatMove_A_B  (k по mvA->m_nCount_B)
 	std::fprintf(f, "id7\n");
 	for (int i = 0; i < pMoves->m_MovesData.m_nMoveCount; i++) {
 		CCombatMove_A* arrA = EMUPOINTER<CCombatMove_A*>(moves[i].m_aArr_A);
 		for (int j = 0; j < moves[i].m_nCount_A; j++) {
-			if (!arrA[j].m_aArr_B) {
+			CCombatMove_A* mvA = &arrA[j];
+
+			if (mvA->m_nCount_B == 0 || !mvA->m_aArr_B) {
 				std::fprintf(f, "[%d][%d][0] null\n", i, j);
 				continue;
 			}
-			CCombatMove_A_B* subB = EMUPOINTER<CCombatMove_A_B*>(arrA[j].m_aArr_B);
-			for (int k = 0; k < 1; k++) {
+
+			CCombatMove_A_B* subB = EMUPOINTER<CCombatMove_A_B*>(mvA->m_aArr_B);
+			for (int k = 0; k < mvA->m_nCount_B; k++) {
 				std::fprintf(f, "[%d][%d][%d]", i, j, k);
 				emit(layout[SECTION_G], (const uint8_t*)&subB[k]);
 				std::fprintf(f, "\n");
