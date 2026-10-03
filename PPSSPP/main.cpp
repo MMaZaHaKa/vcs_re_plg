@@ -1115,11 +1115,15 @@ struct tCombatMove
 };
 
 //#pragma pack(push, 1)
-class CCombatMoveData_A_A
+class CCombatMoveData_A_A // what about CCombatMove_B_A CCombatStat_B_A ??
 {
 public:
-	uint8_t field_0[24]; // min field p2-p1, or min 0x8 unk_973DD44. 0x18 точно, мб меньше
+	uint8_t field_0;
+	uint8_t field_1;
+	uint8_t field_2;
+	uint8_t field_3;
 };
+static_assert(sizeof(CCombatMoveData_A_A) == 4, "sizeof(CCombatMoveData_A_A) == 4");
 
 class CCombatMoveData_A
 {
@@ -1129,13 +1133,40 @@ public:
 };
 static_assert(sizeof(CCombatMoveData_A) == 0x08 - (4) + (sizeof(void*)), "sizeof(CCombatMoveData_A) == 0x08");
 
-class CCombatMove_A // sub_881E290
+class CCombatMove_A_A
 {
 public:
-	uint8_t field_0[8]; // what about CCombatMoveData_B_A
-	uint8_t field_8[24];
+	uint8_t field_0;
+	uint8_t field_1;
+	uint8_t field_2;
+	uint8_t m_nSpeedMin;
+	uint8_t m_nSpeedMax;
+	uint8_t field_5;
+	uint8_t field_6;
+	uint8_t field_7;
 };
-static_assert(sizeof(CCombatMove_A) == 0x20, "sizeof(CCombatMove_A) == 0x20");
+static_assert(sizeof(CCombatMove_A_A) == 0x08, "sizeof(CCombatMove_A_A) == 0x08");
+
+class CCombatMove_A_B // what about CCombatMove_B_A CCombatStat_B_A CCombatMoveData_A_A // recheck probably int32
+{
+public:
+	uint8_t field_0;
+	uint8_t field_1;
+	uint8_t field_2;
+	uint8_t field_3;
+};
+static_assert(sizeof(CCombatMove_A_B) == 4, "sizeof(CCombatMove_A_B) == 4");
+
+class CCombatMove_A //CCombatMoveWeaponData ?? // sub_881E290
+{
+public:
+	CCombatMove_A_A* m_aArr_A;
+	uint8_t field_4[4]; // what about CCombatMoveData_B_A
+	uint64_t m_nWeaponsMask;
+	CCombatMove_A_B* m_aArr_B; // CCombatStat_B_A? CCombatMoveData_A_A?
+	uint8_t m_aMovesIndices[12]; // m_aSpecialMove ?
+};
+static_assert(sizeof(CCombatMove_A) == 0x20 -(4*2)+(sizeof(void*)*2), "sizeof(CCombatMove_A) == 0x20");
 
 class CCombatMove_B_A // what about CCombatStat_B_A // recheck probably int32
 {
@@ -1705,6 +1736,18 @@ void GEN_COMMENT(FILE* file, uint32_t pointerdata, const char* szComment, int ty
 	free(buff);
 }
 
+// альтернативный способ от GEN_FIX_OFFSET(ставил на каждий елемент тип и групировал MakeArray) можно сразу так
+void GEN_ARRAY(FILE* file, uint32_t pointerdata, const char* szType = "CCombatMoveData_A_A *CCombatMoveData_A_A_aArr[4]")
+{
+	//SetType(0x95DAA20, "CCombatMoveData_A_A *CCombatMoveData_A_A_aArr[4];");
+	char* buff = (char*)malloc(512);
+	sprintf(buff, "SetType(0x%X, \"%s\");", pointerdata, szType);
+	fprintf(file, "%s\n", buff);
+	free(buff);
+}
+
+
+// MakeArray сбрасывает им€ на stru_XXXXXXXX
 void GEN_FIX_OFFSET(FILE* file, uint32_t pointerdata, const char* szType, const char* szName, bool typeOnly = false, int arraysize = 0, bool nameOnly = false)
 {
 	char* buff = (char*)malloc(512);
@@ -2818,6 +2861,257 @@ void FixupEtc()
 	}
 #endif
 
+	// Combat
+#if 1
+#if 1
+	{
+		CCombatMoves* pMoves = (CCombatMoves*)gpFightMoves;
+		if (pMoves)
+		{
+			// psp-указатель на сам экземпл€р CCombatMoves (значение по адресу 0x08BAA5B0)
+			uint32_t pspMoves = *EMUPOINTER<uint32_t*>(0x08BAA5B0);
+			if (pspMoves)
+			{
+				// === SECTION A : CCombatMoves (self) ===
+				GEN_FIX_OFFSET(file, pspMoves, "CCombatMoves", "", true); // set type
+				//GEN_FIX_OFFSET(file, pspMoves, "CCombatMoves", "CCombatMoves_main");
+
+				// === SECTION B : CCombatMoveData_A_A[] (m_DataA.m_aArr) ===
+				if (pMoves->m_DataA.m_nCount > 0 && pMoves->m_DataA.m_aArr)
+				{
+#if 0 // ставим каждый елемент как CCombatMoveData_A_A*, ставим объект указани€ CCombatMoveData_A_A и групируем масив указателей но не работает тер€ет в void*
+					// ¬ј∆Ќќ: каст к uint32_t ƒќ арифметики, иначе компил€тор
+					// домножит i*sizeof(void*) ещЄ раз на sizeof(CCombatMoveData_A_A*)
+					uint32_t pBaseArr = (uint32_t)pMoves->m_DataA.m_aArr;
+					for (int32_t i = 0; i < pMoves->m_DataA.m_nCount; i++)
+					{
+						// адрес i-й €чейки массива (по 4 байта)
+						uint32_t pSlot = pBaseArr + (uint32_t)(i * sizeof(void*));
+
+						// (1) тип самой €чейки: CCombatMoveData_A_A* (только тип, им€ не ставим Ч
+						//     его поставит MakeArray позже)
+						GEN_FIX_OFFSET(file, pSlot, "CCombatMoveData_A_A*", "", /*typeOnly*/true); // елемент масива указателей
+
+						// (2) тип того, на что указывает €чейка: CCombatMoveData_A_A
+						uint32_t pElem = *EMUPOINTER<uint32_t*>(pSlot);
+						if (!pElem) continue;
+
+						sprintf(buff, "CCombatMoveData_A_A_%d", i);
+						GEN_FIX_OFFSET(file, pElem, "CCombatMoveData_A_A", buff);
+					}
+
+					// (3) MakeArray по базе
+					sprintf(buff, "CCombatMoveData_A_A_aArr");
+					GEN_FIX_OFFSET(file, pBaseArr, "CCombatMoveData_A_A*", buff,
+						/*typeOnly*/false, pMoves->m_DataA.m_nCount, /*nameOnly*/false);
+
+					// (4) MakeArray сбрасывает им€ -> восстанавливаем
+					GEN_FIX_OFFSET(file, pBaseArr, "", buff, false, 0, /*nameOnly*/true);
+#endif
+					sprintf(buff, "CCombatMoveData_A_A_aArr");
+					GEN_FIX_OFFSET(file, (uint32_t)pMoves->m_DataA.m_aArr, "", buff,
+						/*typeOnly*/false, pMoves->m_DataA.m_nCount, /*nameOnly*/false);
+
+					char arrayDecl[128];
+					sprintf(arrayDecl, "CCombatMoveData_A_A *CCombatMoveData_A_A_aArr[%d]", pMoves->m_DataA.m_nCount);
+					GEN_ARRAY(file, (uint32_t)pMoves->m_DataA.m_aArr, arrayDecl);
+				}
+
+				// === SECTION C / E / F / G : CCombatMove[] (m_MovesData.m_aMoves) ===
+				if (pMoves->m_MovesData.m_nMoveCount > 0 && pMoves->m_MovesData.m_aMoves)
+				{
+					CCombatMove* moves = EMUPOINTER<CCombatMove*>(pMoves->m_MovesData.m_aMoves);
+					if (moves)
+					{
+						for (int32_t i = 0; i < pMoves->m_MovesData.m_nMoveCount; i++)
+						{
+							CCombatMove* mv = &moves[i];
+							uint32_t pMovePsp = (uint32_t)pMoves->m_MovesData.m_aMoves
+								+ (uint32_t)(i * sizeof(CCombatMove));
+
+							sprintf(buff, "CCombatMove_%d", i);
+							GEN_FIX_OFFSET(file, pMovePsp, "CCombatMove", buff);
+
+							// --- SECTION E : CCombatMove_A[] ---
+							if (mv->m_nCount_A > 0 && mv->m_aArr_A)
+							{
+								CCombatMove_A* arrA = EMUPOINTER<CCombatMove_A*>(mv->m_aArr_A);
+								for (int32_t j = 0; j < mv->m_nCount_A; j++)
+								{
+									CCombatMove_A* pA = &arrA[j];
+									uint32_t pAPsp = (uint32_t)mv->m_aArr_A
+										+ (uint32_t)(j * sizeof(CCombatMove_A));
+									sprintf(buff, "CCombatMove_A_%d_%d", i, j);
+									GEN_FIX_OFFSET(file, pAPsp, "CCombatMove_A", buff);
+
+									// ---- m_aArr_A : offset 0x00 -> CCombatMove_A_A* ----
+									if (pA->m_aArr_A)
+									{
+										uint32_t pArr = (uint32_t)pA->m_aArr_A;
+										// элементы массива Ч цепочка CCombatMove_A_<i>_<j>_A_<k>
+										for (int32_t k = 0; k < 1; k++) // todo count неизвестен, пока 1
+										{
+											uint32_t pElem = pArr + (uint32_t)(k * sizeof(CCombatMove_A_A));
+											sprintf(buff, "CCombatMove_A_%d_%d_A_%d", i, j, k);
+											GEN_FIX_OFFSET(file, pElem, "CCombatMove_A_A", buff);
+										}
+									}
+
+									// ---- m_aArr_B : offset 0x10 -> CCombatMove_A_A* ----
+									if (pA->m_aArr_B)
+									{
+										uint32_t pArr = (uint32_t)pA->m_aArr_B;
+										for (int32_t k = 0; k < 1; k++) // todo count неизвестен, пока 1
+										{
+											uint32_t pElem = pArr + (uint32_t)(k * sizeof(CCombatMove_A_B));
+											sprintf(buff, "CCombatMove_A_%d_%d_B_%d", i, j, k);
+											GEN_FIX_OFFSET(file, pElem, "CCombatMove_A_B", buff);
+										}
+									}
+
+								}
+								sprintf(buff, "CCombatMove_A_%d_arr", i);
+								GEN_FIX_OFFSET(file, (uint32_t)mv->m_aArr_A, "CCombatMove_A*", buff,
+									false, mv->m_nCount_A, false);
+								GEN_FIX_OFFSET(file, (uint32_t)mv->m_aArr_A, "", buff, false, 0, true);
+							}
+
+							// --- SECTION F / G : CCombatMove_B[] ---
+							if (mv->m_nCount_B > 0 && mv->m_aArr_B)
+							{
+								CCombatMove_B* arrB = EMUPOINTER<CCombatMove_B*>(mv->m_aArr_B);
+								for (int32_t j = 0; j < mv->m_nCount_B; j++)
+								{
+									CCombatMove_B* mvB = &arrB[j];
+									uint32_t pBPsp = (uint32_t)mv->m_aArr_B
+										+ (uint32_t)(j * sizeof(CCombatMove_B));
+
+									sprintf(buff, "CCombatMove_B_%d_%d", i, j);
+									GEN_FIX_OFFSET(file, pBPsp, "CCombatMove_B", buff);
+
+									// --- SECTION G : CCombatMove_B_A[] ---
+									if (mvB->m_nCount > 0 && mvB->m_aArr)
+									{
+										for (int32_t k = 0; k < mvB->m_nCount; k++)
+										{
+											uint32_t pBAPsp = (uint32_t)mvB->m_aArr
+												+ (uint32_t)(k * sizeof(CCombatMove_B_A));
+											sprintf(buff, "CCombatMove_B_A_%d_%d_%d", i, j, k);
+											GEN_FIX_OFFSET(file, pBAPsp, "CCombatMove_B_A", buff);
+										}
+										sprintf(buff, "CCombatMove_B_A_%d_%d_arr", i, j);
+										GEN_FIX_OFFSET(file, (uint32_t)mvB->m_aArr, "CCombatMove_B_A*", buff,
+											false, mvB->m_nCount, false);
+										GEN_FIX_OFFSET(file, (uint32_t)mvB->m_aArr, "", buff, false, 0, true);
+									}
+								}
+								sprintf(buff, "CCombatMove_B_%d_arr", i);
+								GEN_FIX_OFFSET(file, (uint32_t)mv->m_aArr_B, "CCombatMove_B*", buff,
+									false, mv->m_nCount_B, false);
+								GEN_FIX_OFFSET(file, (uint32_t)mv->m_aArr_B, "", buff, false, 0, true);
+							}
+						}
+						sprintf(buff, "CCombatMove_arr");
+						GEN_FIX_OFFSET(file, (uint32_t)pMoves->m_MovesData.m_aMoves, "CCombatMove*",
+							buff, false, pMoves->m_MovesData.m_nMoveCount, false);
+						GEN_FIX_OFFSET(file, (uint32_t)pMoves->m_MovesData.m_aMoves, "", buff, false, 0, true);
+					}
+				}
+
+				// === SECTION D : CCombatMoveData_B_A[] (m_DataB.m_aArr) ===
+				if (pMoves->m_DataB.m_nCount > 0 && pMoves->m_DataB.m_aArr)
+				{
+					for (int32_t i = 0; i < pMoves->m_DataB.m_nCount; i++)
+					{
+						uint32_t pPsp = (uint32_t)pMoves->m_DataB.m_aArr
+							+ (uint32_t)(i * sizeof(CCombatMoveData_B_A));
+						sprintf(buff, "CCombatMoveData_B_A_%d", i);
+						GEN_FIX_OFFSET(file, pPsp, "CCombatMoveData_B_A", buff);
+					}
+					sprintf(buff, "CCombatMoveData_B_aArr");
+					GEN_FIX_OFFSET(file, (uint32_t)pMoves->m_DataB.m_aArr, "CCombatMoveData_B_A*",
+						buff, false, pMoves->m_DataB.m_nCount, false);
+					GEN_FIX_OFFSET(file, (uint32_t)pMoves->m_DataB.m_aArr, "", buff, false, 0, true);
+				}
+			}
+		}
+	}
+#endif
+
+#if 0
+		CCombatStats* pStats = (CCombatStats*)gpFightStats;
+		if (pStats)
+		{
+			// psp-указатель на сам экземпл€р CCombatStats (значение по адресу 0x08BAB230)
+			uint32_t pspStats = *EMUPOINTER<uint32_t*>(0x08BAB230);
+			if (pspStats)
+			{
+				// === SECTION A : CCombatStats (self) ===
+				GEN_FIX_OFFSET(file, pspStats, "CCombatStats", "", true); // set type
+				//GEN_FIX_OFFSET(file, pspStats, "CCombatStats", "CCombatStats_array");
+
+				if (pStats->m_nNumStats > 0 && pStats->m_aStats)
+				{
+					CCombatStat* stats = EMUPOINTER<CCombatStat*>(pStats->m_aStats);
+					if (stats)
+					{
+						// === SECTION B / C / D / E : CCombatStat[] ===
+						for (int32_t i = 0; i < pStats->m_nNumStats; i++)
+						{
+							CCombatStat* pStat = &stats[i];
+							uint32_t pStatPsp = ((uint32_t)pStats->m_aStats) + (uint32_t)(i * sizeof(CCombatStat));
+
+							sprintf(buff, "CCombatStat_%d", i);
+							GEN_FIX_OFFSET(file, pStatPsp, "CCombatStat", buff);
+
+							// --- SECTION C : CCombatStat_A[] ---
+							if (pStat->m_nCount_A > 0 && pStat->m_aArr_A)
+							{
+								for (int32_t j = 0; j < pStat->m_nCount_A; j++)
+								{
+									uint32_t pAPsp = ((uint32_t)pStat->m_aArr_A) + (uint32_t)(j * sizeof(CCombatStat_A));
+									sprintf(buff, "CCombatStat_A_%d_%d", i, j);
+									GEN_FIX_OFFSET(file, pAPsp, "CCombatStat_A", buff);
+								}
+								sprintf(buff, "CCombatStat_A_%d_arr", i);
+								GEN_FIX_OFFSET(file, (uint32_t)pStat->m_aArr_A, "CCombatStat_A*", buff, false, pStat->m_nCount_A, false); //arr
+								GEN_FIX_OFFSET(file, (uint32_t)pStat->m_aArr_A, "", buff, false, 0, true); // name
+							}
+
+							// --- SECTION D / E : CCombatStat_B[] ---
+							if (pStat->m_nCount_B > 0 && pStat->m_aArr_B)
+							{
+								CCombatStat_B* arrB = EMUPOINTER<CCombatStat_B*>(pStat->m_aArr_B);
+								for (int32_t j = 0; j < pStat->m_nCount_B; j++)
+								{
+									CCombatStat_B* pB = &arrB[j];
+									uint32_t pBPsp = ((uint32_t)pStat->m_aArr_B) + (uint32_t)(j * sizeof(CCombatStat_B));
+
+									sprintf(buff, "CCombatStat_B_%d_%d", i, j);
+									GEN_FIX_OFFSET(file, pBPsp, "CCombatStat_B", buff);
+
+									// --- SECTION E : CCombatStat_B_A (pB->m_pData) ---
+									if (pB->m_pData)
+									{
+										sprintf(buff, "CCombatStat_B_A_%d_%d", i, j);
+										GEN_FIX_OFFSET(file, (uint32_t)pB->m_pData, "CCombatStat_B_A", buff);
+									}
+								}
+								sprintf(buff, "CCombatStat_B_%d_arr", i);
+								GEN_FIX_OFFSET(file, (uint32_t)pStat->m_aArr_B, "CCombatStat_B*", buff, false, pStat->m_nCount_B, false); // arr
+								GEN_FIX_OFFSET(file, (uint32_t)pStat->m_aArr_B, "", buff, false, 0, true); // name
+							}
+						}
+
+						GEN_FIX_OFFSET(file, (uint32_t)pStats->m_aStats, "CCombatStat*", "CCombatStat_arr", false, pStats->m_nNumStats, false); // arr
+						GEN_FIX_OFFSET(file, (uint32_t)pStats->m_aStats, "", "CCombatStat_arr", false, 0, true); // name
+					}
+				}
+			}
+		}
+#endif
+#endif
+
 	if (file) {
 		fprintf(file, "Message(\"IDC Done\\n\");\n");
 		fclose(file);
@@ -3127,7 +3421,7 @@ void OnBtn()
 	//GenRelocComs();
 	//FixupInter();
 	//FixupStatsTypes();
-	//FixupEtc();
+	FixupEtc();
 	//DumpCombat();
 	//DumpSfx2();
 	Test();
@@ -3628,57 +3922,6 @@ tCombatMove* GetCombatMovie(uint32_t n)
 	//	uint8_t* pCurr = pMovesData + (0x40 * i);
 	//	char* pName = (char*)(pCurr + 0x33);
 	//}
-}
-
-void LogCombat()
-{
-	CEntity* pPed = FindPlayerPed();
-	if (!pPed) return;
-	//uint8_t* pMyCombatMgr = OFFSET(pPed, 0x7E0, uint8_t*); // sizeof(0x2C) // unused for playerped??
-	uint8_t* m_nPlayerCombatInfo = EMUPOINTER<uint8_t*>(*OFFSET(pPed, 0xCDC, uint32_t*)); // sizeof(0x18B0)
-	uint8_t* m_nPlayerCombatMgr = OFFSET(m_nPlayerCombatInfo, 0x4, uint8_t*); // sizeof(0x94)
-	//printf("m_fStamina: %f\n", *OFFSET(m_nPlayerCombatMgr, 0x0, float*));
-	//*OFFSET(m_nPlayerCombatMgr, 0x0, float*) = 0.0f;
-	uint8_t& index = *OFFSET(m_nPlayerCombatMgr, 0x8, uint8_t*);
-	uint8_t& flagsA = *OFFSET(m_nPlayerCombatMgr, 0x9, uint8_t*);
-	uint8_t& flagsB = *OFFSET(m_nPlayerCombatMgr, 0xA, uint8_t*);
-	uint8_t& flagsC = *OFFSET(m_nPlayerCombatMgr, 0xB, uint8_t*);
-	//flagsB = 0;
-	//index = 0; // kek walk
-	//printf("index: %d\n", index);
-	//printf("flags: %d %d %d\n", flagsA, flagsB, flagsC);
-	uint32_t pfakemgr = OFFSET(*OFFSET(pPed, 0xCDC, uint32_t*), 0x4, uint32_t);
-	printf("current movie %d %s 0x%p\n", index, GetCombatMovie(index)->name, OFFSET(pfakemgr, 0x8, uint32_t));
-	printf("fs: %f\n", *OFFSET(m_nPlayerCombatMgr, 0x0, float*));
-
-	uint8_t* pCapPed = EMUPOINTER<uint8_t*>(*OFFSET(pPed, 0x81C, uint32_t*));
-	if (pCapPed) {
-		//printf("capped: 0x%p\n", pCapPed);
-		uint8_t* pCapPedCombatMgr = OFFSET(pCapPed, 0x7E0, uint8_t*); // sizeof(0x2C) // unused for playerped??
-		//printf("capindex: %d\n", *OFFSET(pCapPedCombatMgr, 0x8, uint8_t*));
-		//printf("capflags: %d %d %d\n", *OFFSET(pCapPedCombatMgr, 0x9, uint8_t*), *OFFSET(pCapPedCombatMgr, 0xA, uint8_t*), *OFFSET(pCapPedCombatMgr, 0xB, uint8_t*));
-	}
-
-
-
-	return; //---------!!
-	uint8_t* m_CombatManager = OFFSET(pPed, 0x7E0, uint8_t*); // sizeof(0x2C)
-	uint8_t* m_pPlayerCombat = OFFSET(pPed, 0xCDC, uint8_t*); // sizeof(0x2C)
-	//float& m_fStamina = *OFFSET(m_CombatManager, 0x0, float*);
-	//m_fStamina = 0;
-	//*(int*)m_pPlayerCombat = 0; // crash
-	uint8_t* m_nPlayerCombat2 = EMUPOINTER<uint8_t*>(*(int*)m_pPlayerCombat); // sizeof(0x18B0)
-	uint8_t* m_nPlayerCombat3 = OFFSET(m_nPlayerCombat2, 0x4, uint8_t*); // sizeof(0x94)
-	//memset(m_nPlayerCombat3, 0, 0x24);
-
-	//printf("pPed: 0x%p\n", pPed);
-	//printf("m_CombatManager.m_fStamina: %f  0x%p\n", m_fStamina, &m_fStamina);
-	//printf("m_CombatManager.m_fStamina: 0x%p\n", OFFSET(m_CombatManager, 0x0, float*));
-	printf("PC: 0x%p\n", m_CombatManager);
-	printf("PLC: 0x%p\n", m_nPlayerCombat3);
-	printf("m_fStamina: %f\n", *OFFSET(m_nPlayerCombat3, 0x0, float*));
-	*OFFSET(m_nPlayerCombat3, 0x0, float*) = 0.0f;
-	//printf("\n");
 }
 
 void LogH()
@@ -4289,22 +4532,23 @@ void DumpCombatMovesToFile(CCombatMoves* pMoves, const char* filename)
 		SECTION_C, // CCombatMove
 		SECTION_D, // CCombatMoveData_B_A
 		SECTION_E, // CCombatMove_A
-		SECTION_F, // CCombatMove_B
-		SECTION_G, // CCombatMove_B_A
+		SECTION_F, // CCombatMove_A_A
+		SECTION_G, // CCombatMove_A_B
+		SECTION_H, // CCombatMove_B
+		SECTION_I, // CCombatMove_B_A
 	};
 
 	struct CSectionLayout {
 		int32_t structSize;
-		std::map<size_t, size_t> skips; // offset -> size, пропуск (например указателей)
+		std::map<size_t, size_t> skips;
 	};
 
-	// индекс таблицы = значение enum
 	static const CSectionLayout layout[] = {
 		/*NONE*/      { 0, {} },
 		/*SECTION_A*/ { sizeof(CCombatMoves), {
-			{ offsetof(CCombatMoves, m_DataA) + offsetof(CCombatMoveData_A, m_aArr), sizeof(void*) },
+			{ offsetof(CCombatMoves, m_DataA) + offsetof(CCombatMoveData_A, m_aArr),   sizeof(void*) },
 			{ offsetof(CCombatMoves, m_MovesData) + offsetof(CCombatMoveData,   m_aMoves), sizeof(void*) },
-			{ offsetof(CCombatMoves, m_DataB) + offsetof(CCombatMoveData_B, m_aArr), sizeof(void*) },
+			{ offsetof(CCombatMoves, m_DataB) + offsetof(CCombatMoveData_B, m_aArr),   sizeof(void*) },
 			{ offsetof(CCombatMoves, m_pEntity), sizeof(void*) },
 		}},
 		/*SECTION_B*/ { sizeof(CCombatMoveData_A_A), { } },
@@ -4313,14 +4557,18 @@ void DumpCombatMovesToFile(CCombatMoves* pMoves, const char* filename)
 			{ offsetof(CCombatMove, m_aArr_B), sizeof(void*) },
 		}},
 		/*SECTION_D*/ { sizeof(CCombatMoveData_B_A), { } },
-		/*SECTION_E*/ { sizeof(CCombatMove_A), { } },
-		/*SECTION_F*/ { sizeof(CCombatMove_B), {
+		/*SECTION_E*/ { sizeof(CCombatMove_A), {
+			{ offsetof(CCombatMove_A, m_aArr_A), sizeof(void*) },
+			{ offsetof(CCombatMove_A, m_aArr_B), sizeof(void*) },
+		}},
+		/*SECTION_F*/ { sizeof(CCombatMove_A_A), { } },
+		/*SECTION_G*/ { sizeof(CCombatMove_A_B), { } },
+		/*SECTION_H*/ { sizeof(CCombatMove_B), {
 			{ offsetof(CCombatMove_B, m_aArr), sizeof(void*) },
 		}},
-		/*SECTION_G*/ { sizeof(CCombatMove_B_A), { } },
+		/*SECTION_I*/ { sizeof(CCombatMove_B_A), { } },
 	};
 
-	// печатает POD-байты структуры, пропуска€ диапазоны из таблицы
 	auto emit = [&](const CSectionLayout& L, const uint8_t* base) {
 		size_t caret = 0, wrote = 0, skipSum = 0;
 		for (auto& kv : L.skips) skipSum += kv.second;
@@ -4389,27 +4637,65 @@ void DumpCombatMovesToFile(CCombatMoves* pMoves, const char* filename)
 	}
 	std::fprintf(f, "end\n\n");
 
-	// SECTION_F - CCombatMove_B
+	// SECTION_F - CCombatMove_A_A
 	std::fprintf(f, "id6\n");
+	for (int i = 0; i < pMoves->m_MovesData.m_nMoveCount; i++) {
+		CCombatMove_A* arrA = EMUPOINTER<CCombatMove_A*>(moves[i].m_aArr_A);
+		for (int j = 0; j < moves[i].m_nCount_A; j++) {
+			if (!arrA[j].m_aArr_A) {
+				std::fprintf(f, "[%d][%d][0] null\n", i, j);
+				continue;
+			}
+			CCombatMove_A_A* subA = EMUPOINTER<CCombatMove_A_A*>(arrA[j].m_aArr_A);
+			for (int k = 0; k < 1; k++) {
+				std::fprintf(f, "[%d][%d][%d]", i, j, k);
+				emit(layout[SECTION_F], (const uint8_t*)&subA[k]);
+				std::fprintf(f, "\n");
+			}
+		}
+	}
+	std::fprintf(f, "end\n\n");
+
+	// SECTION_G - CCombatMove_A_B
+	std::fprintf(f, "id7\n");
+	for (int i = 0; i < pMoves->m_MovesData.m_nMoveCount; i++) {
+		CCombatMove_A* arrA = EMUPOINTER<CCombatMove_A*>(moves[i].m_aArr_A);
+		for (int j = 0; j < moves[i].m_nCount_A; j++) {
+			if (!arrA[j].m_aArr_B) {
+				std::fprintf(f, "[%d][%d][0] null\n", i, j);
+				continue;
+			}
+			CCombatMove_A_B* subB = EMUPOINTER<CCombatMove_A_B*>(arrA[j].m_aArr_B);
+			for (int k = 0; k < 1; k++) {
+				std::fprintf(f, "[%d][%d][%d]", i, j, k);
+				emit(layout[SECTION_G], (const uint8_t*)&subB[k]);
+				std::fprintf(f, "\n");
+			}
+		}
+	}
+	std::fprintf(f, "end\n\n");
+
+	// SECTION_H - CCombatMove_B
+	std::fprintf(f, "id8\n");
 	for (int i = 0; i < pMoves->m_MovesData.m_nMoveCount; i++) {
 		CCombatMove_B* arrB = EMUPOINTER<CCombatMove_B*>(moves[i].m_aArr_B);
 		for (int j = 0; j < moves[i].m_nCount_B; j++) {
 			std::fprintf(f, "[%d][%d]", i, j);
-			emit(layout[SECTION_F], (const uint8_t*)&arrB[j]);
+			emit(layout[SECTION_H], (const uint8_t*)&arrB[j]);
 			std::fprintf(f, "\n");
 		}
 	}
 	std::fprintf(f, "end\n\n");
 
-	// SECTION_G - CCombatMove_B_A
-	std::fprintf(f, "id7\n");
+	// SECTION_I - CCombatMove_B_A
+	std::fprintf(f, "id9\n");
 	for (int i = 0; i < pMoves->m_MovesData.m_nMoveCount; i++) {
 		CCombatMove_B* arrB = EMUPOINTER<CCombatMove_B*>(moves[i].m_aArr_B);
 		for (int j = 0; j < moves[i].m_nCount_B; j++) {
 			CCombatMove_B_A* arrBA = EMUPOINTER<CCombatMove_B_A*>(arrB[j].m_aArr);
 			for (int k = 0; k < arrB[j].m_nCount; k++) {
 				std::fprintf(f, "[%d][%d][%d]", i, j, k);
-				emit(layout[SECTION_G], (const uint8_t*)&arrBA[k]);
+				emit(layout[SECTION_I], (const uint8_t*)&arrBA[k]);
 				std::fprintf(f, "\n");
 			}
 		}
@@ -4537,9 +4823,12 @@ void DumpCombat2F()
 	CCombatMoves* pMoves = (CCombatMoves*)gpFightMoves;
 	CCombatStats* pStats = (CCombatStats*)gpFightStats;
 
+#if 1
 	DumpCombatMovesToFile(pMoves, pMovesFile);
 	DumpCombatStatsToFile(pStats, pStatsFile);
-
+	printf("DumpCombat done\n");
+	Sleep(50000000);
+#endif
 
 	for (int32_t i = 0; i < pMoves->m_MovesData.m_nMoveCount; i++)
 	{
@@ -4551,8 +4840,88 @@ void DumpCombat2F()
 	}
 
 
-	printf("DumpCombat done\n");
-	Sleep(50000000);
+	{
+		CCombatMove* moves = EMUPOINTER<CCombatMove*>(pMoves->m_MovesData.m_aMoves);
+		for (int32_t i = 0; i < pMoves->m_MovesData.m_nMoveCount; i++)
+		{
+			CCombatMove* mv = &moves[i];
+
+			CCombatMove_B* arrB = EMUPOINTER<CCombatMove_B*>(mv->m_aArr_B);
+			for (int32_t j = 0; j < mv->m_nCount_B; j++)
+			{
+				CCombatMove_B* mvB = &arrB[j];
+
+				CCombatMove_B_A* arrBA = EMUPOINTER<CCombatMove_B_A*>(mvB->m_aArr);
+				for (int32_t k = 0; k < mvB->m_nCount; k++)
+				{
+					CCombatMove_B_A* mvBA = &arrBA[k];
+					// у CCombatMove_B_A нет count Ч терминальный уровень
+					(void)mvBA;
+				}
+
+				mvB->m_nCount = 0;
+			}
+
+			mv->m_nCount_A = 0; // 0 руками махает
+			mv->m_nCount_B = 0; // 0 нет ударов
+		}
+
+		pMoves->m_DataA.m_nCount = 0;
+		pMoves->m_MovesData.m_nMoveCount = 0;
+		pMoves->m_DataB.m_nCount = 0;
+	}
+
+}
+
+void LogCombat()
+{
+	CEntity* pPed = FindPlayerPed();
+	if (!pPed) return;
+	//uint8_t* pMyCombatMgr = OFFSET(pPed, 0x7E0, uint8_t*); // sizeof(0x2C) // unused for playerped??
+	uint8_t* m_nPlayerCombatInfo = EMUPOINTER<uint8_t*>(*OFFSET(pPed, 0xCDC, uint32_t*)); // sizeof(0x18B0)
+	uint8_t* m_nPlayerCombatMgr = OFFSET(m_nPlayerCombatInfo, 0x4, uint8_t*); // sizeof(0x94)
+	//printf("m_fStamina: %f\n", *OFFSET(m_nPlayerCombatMgr, 0x0, float*));
+	//*OFFSET(m_nPlayerCombatMgr, 0x0, float*) = 0.0f;
+	uint8_t& index = *OFFSET(m_nPlayerCombatMgr, 0x8, uint8_t*);
+	uint8_t& flagsA = *OFFSET(m_nPlayerCombatMgr, 0x9, uint8_t*);
+	uint8_t& flagsB = *OFFSET(m_nPlayerCombatMgr, 0xA, uint8_t*);
+	uint8_t& flagsC = *OFFSET(m_nPlayerCombatMgr, 0xB, uint8_t*);
+	//flagsB = 0;
+	//index = 1; // kek walk
+	//printf("index: %d\n", index);
+	//printf("flags: %d %d %d\n", flagsA, flagsB, flagsC);
+	uint32_t pfakemgr = OFFSET(*OFFSET(pPed, 0xCDC, uint32_t*), 0x4, uint32_t);
+	printf("current movie %d %s 0x%p\n", index, GetCombatMovie(index)->name, OFFSET(pfakemgr, 0x8, uint32_t));
+	printf("fs: %f\n", *OFFSET(m_nPlayerCombatMgr, 0x0, float*));
+
+	uint8_t* pCapPed = EMUPOINTER<uint8_t*>(*OFFSET(pPed, 0x81C, uint32_t*));
+	if (pCapPed) {
+		//printf("capped: 0x%p\n", pCapPed);
+		uint8_t* pCapPedCombatMgr = OFFSET(pCapPed, 0x7E0, uint8_t*); // sizeof(0x2C) // unused for playerped??
+		//printf("capindex: %d\n", *OFFSET(pCapPedCombatMgr, 0x8, uint8_t*));
+		//printf("capflags: %d %d %d\n", *OFFSET(pCapPedCombatMgr, 0x9, uint8_t*), *OFFSET(pCapPedCombatMgr, 0xA, uint8_t*), *OFFSET(pCapPedCombatMgr, 0xB, uint8_t*));
+	}
+
+
+
+	return; //---------!!
+	uint8_t* m_CombatManager = OFFSET(pPed, 0x7E0, uint8_t*); // sizeof(0x2C)
+	uint8_t* m_pPlayerCombat = OFFSET(pPed, 0xCDC, uint8_t*); // sizeof(0x2C)
+	//float& m_fStamina = *OFFSET(m_CombatManager, 0x0, float*);
+	//m_fStamina = 0;
+	//*(int*)m_pPlayerCombat = 0; // crash
+	uint8_t* m_nPlayerCombat2 = EMUPOINTER<uint8_t*>(*(int*)m_pPlayerCombat); // sizeof(0x18B0)
+	uint8_t* m_nPlayerCombat3 = OFFSET(m_nPlayerCombat2, 0x4, uint8_t*); // sizeof(0x94)
+	//memset(m_nPlayerCombat3, 0, 0x24);
+
+	//printf("pPed: 0x%p\n", pPed);
+	//printf("m_CombatManager.m_fStamina: %f  0x%p\n", m_fStamina, &m_fStamina);
+	//printf("m_CombatManager.m_fStamina: 0x%p\n", OFFSET(m_CombatManager, 0x0, float*));
+	printf("PC: 0x%p\n", m_CombatManager);
+	printf("PLC: 0x%p\n", m_nPlayerCombat3);
+	printf("m_fStamina: %f\n", *OFFSET(m_nPlayerCombat3, 0x0, float*));
+	*OFFSET(m_nPlayerCombat3, 0x0, float*) = 0.0f;
+	//printf("\n");
 }
 
 
@@ -4567,15 +4936,17 @@ void MainUpd()
 		if((GetAsyncKeyState(VK_SHIFT) & 0x8000) == 0)
 		system("cls");
 		//LogRadar();
+		LogCombat();
 		//Test1();
-		Test2();
+		//Test2();
 	}
 
 	if (BTN('T'))
 	{
 		DumpCombat2F();
+		LogCombat();
 		Test2();
-		//poll^=1;
+		poll^=1;
 		LogMenu();
 		//LogCustomTracks();
 		//LogRadar();
@@ -4585,6 +4956,13 @@ void MainUpd()
 		//TestModelInfo();
 		Sleep(500);
 	}
+
+	if (BTN('H'))
+	{
+		OnBtn();
+		Sleep(500);
+	}
+
 
 	//char* pdma = EMUPOINTER<char*>(0x08BAFB5C);
 	//pdma[0] = rand() % 2;
